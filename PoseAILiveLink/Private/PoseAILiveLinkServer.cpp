@@ -88,7 +88,7 @@ void PoseAILiveLinkServer::ReceiveUDPDelegate(const FArrayReaderPtr& arrayReader
 	if (cleaningUp)
 		return;
 
-	FString sessionID = endpoint.Address.ToString();
+	FString sessionID = endpoint.ToString();
 	
 	FString recvMessage;
 	char* bytedata = (char*)arrayReaderPtr->GetData();
