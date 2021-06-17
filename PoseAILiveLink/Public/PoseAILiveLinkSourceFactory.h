@@ -17,11 +17,11 @@ class POSEAILIVELINK_API UPoseAILiveLinkSourceFactory : public ULiveLinkSourceFa
 	GENERATED_BODY()
 
 	UPoseAILiveLinkSourceFactory() {
-		UE_LOG(LogTemp, Warning, TEXT("instantiating PoseAILiveLinkSourceFactory"));
+		UE_LOG(LogTemp, Display, TEXT("instantiating PoseAILiveLinkSourceFactory"));
 	}
 
 	~UPoseAILiveLinkSourceFactory () {
-		UE_LOG(LogTemp, Warning, TEXT("destroying PoseAILiveLinkSourceFactory"));
+		UE_LOG(LogTemp, Display, TEXT("destroying PoseAILiveLinkSourceFactory"));
 	}
 
 public:

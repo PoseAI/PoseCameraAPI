@@ -23,12 +23,11 @@
 class POSEAILIVELINK_API PoseAILiveLinkSource : public ILiveLinkSource
 {
 public:
-	PoseAILiveLinkSource(int32 portNum, const PoseAIHandshake& handshake, bool useRootMotion);
+	PoseAILiveLinkSource(int32 inIPv4port, int32 inIPv6port, const PoseAIHandshake& handshake, bool useRootMotion);
 	
 	~PoseAILiveLinkSource ();
 
-
-	void disable();
+		void disable();
 	void setIPAddress(const FText & ip);
 
 	virtual void ReceiveClient(ILiveLinkClient* InClient, FGuid InSourceGuid);
@@ -58,17 +57,23 @@ public:
 	static bool IsValidPort(int32 port);
 
 private:
+	int32 portIPv4;
+	int32 portIPv6;
+	/* stores ports across different sources to avoid conflict */
 	static TArray<int32> usedPorts;
+
 	ILiveLinkClient* liveLinkClient = nullptr;
-	int32 port;
-	
 	ILiveLinkClient* client;
 	const PoseAIHandshake handshake;
 	bool useRootMotion = true;
 
 	bool enabled;
 	mutable FText status;
-	TSharedPtr<PoseAILiveLinkServer, ESPMode::ThreadSafe> udpServer;
+
+	/* create two different server objects if user wants both IPv4 and IPv6, as not all systems allow dual sockets*/
+	TSharedPtr<PoseAILiveLinkServer, ESPMode::ThreadSafe> udpServerIPv4;
+	TSharedPtr<PoseAILiveLinkServer, ESPMode::ThreadSafe> udpServerIPv6;
+	
 	TMap<FName, FLiveLinkSubjectKey> subjectKeys = {};
 	TMap<FName, PoseAIRig> rigs = {};
 	TQueue<FName> newConnections = {};

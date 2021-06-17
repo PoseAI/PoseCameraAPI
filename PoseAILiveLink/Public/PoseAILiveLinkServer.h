@@ -5,17 +5,17 @@
 #include "CoreMinimal.h"
 #include "Runtime/Networking/Public/Networking.h"
 #include "Runtime/Networking/Public/Common/UdpSocketBuilder.h"
-#include "Runtime/Networking/Public/Common/UdpSocketReceiver.h"
+//#include "Runtime/Networking/Public/Common/UdpSocketReceiver.h"
 #include "Runtime/Networking/Public/Common/UdpSocketSender.h"
 #include "Runtime/Sockets/Public/Sockets.h"
 #include "Runtime/Sockets/Public/SocketSubsystem.h"
 #include "IPAddress.h"
 #include "Json.h"
 #include "PoseAIHandshake.h"
-
+#include "PoseAIUdpSocketReceiver.h"
+#include "PoseAIEndpoint.h"
 
 #define LOCTEXT_NAMESPACE "PoseAI"
-
 
 DECLARE_DELEGATE_TwoParams(FPoseFrameDelegate, FName&, TSharedPtr<FJsonObject>);
 
@@ -26,12 +26,16 @@ class FPoseAISocketSender;
 class POSEAILIVELINK_API PoseAILiveLinkServer
 {
 public:
-	void ReceiveUDPDelegate(const FArrayReaderPtr& arrayReaderPtr, const FIPv4Endpoint& endpoint);
+	void ReceiveUDPDelegate(const FArrayReaderPtr& arrayReaderPtr, const FPoseAIEndpoint& endpoint);
 	FSocket* GetSocket() const { return serverSocket; }
 	
 	void CreateServer(int32 port, PoseAIHandshake myHandshake);
-	void SetReceiver(TSharedPtr<FUdpSocketReceiver, ESPMode::ThreadSafe> receiver) {
+	void SetReceiver(TSharedPtr<FPoseAIUdpSocketReceiver, ESPMode::ThreadSafe> receiver) {
 		udpSocketReceiver = receiver;
+	}
+
+	PoseAILiveLinkServer(bool isIPv6 = false) {
+		protocolType = (isIPv6) ? FNetworkProtocolTypes::IPv6 : FNetworkProtocolTypes::IPv4;
 	}
 
 	FPoseFrameDelegate& OnPoseReceived() {
@@ -55,19 +59,20 @@ private:
 	const static FString fieldVersion;
 	const static FString requiredMinVersion;
 
+	FName protocolType;
 	int32 portNum;
 	FSocket* serverSocket;
-	TSharedPtr<FUdpSocketReceiver, ESPMode::ThreadSafe> udpSocketReceiver;
+	TSharedPtr<FPoseAIUdpSocketReceiver, ESPMode::ThreadSafe> udpSocketReceiver;
 	TSharedPtr<FPoseAISocketSender, ESPMode::ThreadSafe> udpSocketSender;
 	TSharedPtr<PoseAILiveLinkRunnable, ESPMode::ThreadSafe> poseAILiveLinkRunnable;
 	FPoseFrameDelegate poseFrameDelegate;
-	TMap<FString, FIPv4Endpoint> knownSockets;
+	TMap<FString, FPoseAIEndpoint> knownSockets;
 	TMap<FString, FName> prettyNames;
 	
 	bool cleaningUp = false;
 	FString disconnect = FString(TEXT("{\"REQUESTS\":[\"DISCONNECT\"]}"));
 
-	void SendHandshake(const FIPv4Endpoint& endpoint) const;
+	void SendHandshake(const FPoseAIEndpoint& endpoint) const;
 
 	bool ExtractPrettyName(TSharedPtr<FJsonObject> jsonObject, FName& prettyName) const;
 	bool CheckAppVersion(TSharedPtr<FJsonObject> jsonObject) const;
@@ -92,7 +97,7 @@ public:
 
 		FTimespan inWaitTime = FTimespan::FromMilliseconds(250);
 		FString receiverName = "PoseAILiveLink_Receiver_On_Port_" + FString::FromInt(port);
-		TSharedPtr<FUdpSocketReceiver, ESPMode::ThreadSafe> udpSocketReceiver = MakeShared<FUdpSocketReceiver, ESPMode::ThreadSafe>(poseAILiveLinkServer->GetSocket(), inWaitTime, * receiverName);
+		TSharedPtr<FPoseAIUdpSocketReceiver, ESPMode::ThreadSafe> udpSocketReceiver = MakeShared<FPoseAIUdpSocketReceiver, ESPMode::ThreadSafe>(poseAILiveLinkServer->GetSocket(), inWaitTime, * receiverName);
 		udpSocketReceiver->OnDataReceived().BindRaw(poseAILiveLinkServer, &PoseAILiveLinkServer::ReceiveUDPDelegate);
 		udpSocketReceiver->Start();
 		poseAILiveLinkServer->SetReceiver(udpSocketReceiver);
@@ -122,13 +127,13 @@ class POSEAILIVELINK_API FPoseAISocketSender : public FRunnable
 		TSharedPtr<TArray<uint8>, ESPMode::ThreadSafe> Data;
 
 		/** Holds the recipient. */
-		FIPv4Endpoint Recipient;
+		FPoseAIEndpoint Recipient;
 
 		/** Default constructor. */
 		FPacket() { }
 
 		/** Creates and initializes a new instance. */
-		FPacket(const TSharedRef<TArray<uint8>, ESPMode::ThreadSafe>& InData, const FIPv4Endpoint& InRecipient)
+		FPacket(const TSharedRef<TArray<uint8>, ESPMode::ThreadSafe>& InData, const FPoseAIEndpoint& InRecipient)
 			: Data(InData)
 			, Recipient(InRecipient)
 		{ }
@@ -143,17 +148,17 @@ public:
 	
 	bool ClearQueue() {
 		while (sendQueue.IsEmpty() == false) {
-			if (socket == nullptr)
+			if (socket == nullptr) {
+				UE_LOG(LogTemp, Warning, TEXT("PoseAI LiveLink: socket missing from sender"));
 				return false;
-			/*
-			if (!socket->Wait(ESocketWaitConditions::WaitForWrite, socketWaitTime))
-			{
-				break;
-			}*/
+			}
+			
 			FPacket packet;
 			int32 sent = 0;
 			sendQueue.Dequeue(packet);
-			socket->SendTo(packet.Data->GetData(), packet.Data->Num(), sent, *packet.Recipient.ToInternetAddr());
+			if (!socket->SendTo(packet.Data->GetData(), packet.Data->Num(), sent, *packet.Recipient.ToInternetAddr())) {
+				UE_LOG(LogTemp, Warning, TEXT("PoseAI LiveLink: unable to send to %s"), *(packet.Recipient.ToString()));			
+			}
 
 			if (sent != packet.Data->Num())
 			{
@@ -197,7 +202,7 @@ public:
 		socket = nullptr;
 	}
 
-	bool Send(const TSharedRef<TArray<uint8>, ESPMode::ThreadSafe>& Data, const FIPv4Endpoint& Recipient)
+	bool Send(const TSharedRef<TArray<uint8>, ESPMode::ThreadSafe>& Data, const FPoseAIEndpoint& Recipient)
 	{
 		if (running) {
 			sendQueue.Enqueue(FPacket(Data, Recipient));

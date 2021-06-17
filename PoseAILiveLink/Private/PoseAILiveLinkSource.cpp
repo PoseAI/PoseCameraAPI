@@ -12,18 +12,31 @@ static int unlockedAt;
 static FCriticalSection mutx; 
 
 
-PoseAILiveLinkSource::PoseAILiveLinkSource(int32 portNum, const PoseAIHandshake& handshake, bool useRootMotion) :
-	port(portNum), handshake(handshake), useRootMotion(useRootMotion), enabled(true), status(LOCTEXT("statusConnecting", "connecting"))
+PoseAILiveLinkSource::PoseAILiveLinkSource(int32 inIPv4port, int32 inIPv6port, const PoseAIHandshake& handshake, bool useRootMotion) :
+	portIPv4(inIPv4port), portIPv6(inIPv6port), handshake(handshake), useRootMotion(useRootMotion), enabled(true), status(LOCTEXT("statusConnecting", "connecting"))
 {
-	UE_LOG(LogTemp, Display, TEXT("PoseAI: connecting to %d"), portNum);
-	usedPorts.Emplace(portNum);
-	udpServer = MakeShared<PoseAILiveLinkServer, ESPMode::ThreadSafe>();
-	udpServer->CreateServer(portNum, handshake);
-	udpServer->OnPoseReceived().BindRaw(this, &PoseAILiveLinkSource::UpdatePose);
-	FString myIP;
-	udpServer->GetIP(myIP);
-	status = FText::FormatOrdered(LOCTEXT("statusConnected", "listening on {0} Port:{1}"), FText::FromString(myIP), FText::FromString(FString::FromInt(portNum)));
-	
+	if (inIPv6port > 0) {
+		UE_LOG(LogTemp, Display, TEXT("PoseAI: connecting to %d using IPv6"), inIPv6port);
+
+		usedPorts.Emplace(inIPv6port);
+		udpServerIPv6 = MakeShared<PoseAILiveLinkServer, ESPMode::ThreadSafe>(true);
+		udpServerIPv6->CreateServer(inIPv6port, handshake);
+		udpServerIPv6->OnPoseReceived().BindRaw(this, &PoseAILiveLinkSource::UpdatePose);
+		status = FText::FormatOrdered(LOCTEXT("statusConnected", "listening on IPv6 local-link Port:{1}"), FText::FromString(FString::FromInt(inIPv6port)));
+
+	}
+
+	if (inIPv4port > 0) {
+		UE_LOG(LogTemp, Display, TEXT("PoseAI: connecting to %d using IPv4"), inIPv4port);
+
+		usedPorts.Emplace(inIPv4port);
+		udpServerIPv4 = MakeShared<PoseAILiveLinkServer, ESPMode::ThreadSafe>(false);
+		udpServerIPv4->CreateServer(inIPv4port, handshake);
+		udpServerIPv4->OnPoseReceived().BindRaw(this, &PoseAILiveLinkSource::UpdatePose);
+		FString myIP;
+		udpServerIPv4->GetIP(myIP);
+		status = FText::FormatOrdered(LOCTEXT("statusConnected", "listening on {0} Port:{1}"), FText::FromString(myIP), FText::FromString(FString::FromInt(inIPv4port)));
+	}
 }
 
 PoseAIRig PoseAILiveLinkSource::MakeRig() {
@@ -90,9 +103,14 @@ bool PoseAILiveLinkSource::IsSourceStillValid() const
 
 PoseAILiveLinkSource::~PoseAILiveLinkSource()
 {
-	usedPorts.Remove(port);
-	UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: PoseAILiveLinkSource on port %d closed"), port);
-
+	if (portIPv4 > 0) {
+		usedPorts.Remove(portIPv4);
+		UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: PoseAILiveLinkSource on port %d closed"), portIPv4);
+	}
+	if (portIPv6 > 0) {
+		usedPorts.Remove(portIPv6);
+		UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: PoseAILiveLinkSource on port %d closed"), portIPv6);
+	}
 	
 }
 
@@ -131,9 +149,12 @@ bool PoseAILiveLinkSource::RequestSourceShutdown()
 		}
 	}
 	subjectKeys.Empty();
-	if (udpServer)
-		udpServer->CleanUp();
-	udpServer = nullptr;
+	if (udpServerIPv4)
+		udpServerIPv4->CleanUp();
+	if (udpServerIPv6)
+		udpServerIPv6->CleanUp();
+	udpServerIPv4 = nullptr;
+	udpServerIPv6 = nullptr;
 
 	mutx.Lock(); lockedAt = __LINE__;
 	liveLinkClient = nullptr;

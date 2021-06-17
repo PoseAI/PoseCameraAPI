@@ -4,6 +4,7 @@
 #include "Json.h"
 #include "PoseAIRig.h"
 #include "LiveLinkLog.h"
+#include "SocketTypes.h"
 
 
 const FString PoseAILiveLinkServer::requiredMinVersion = FString(TEXT("0.6.0"));
@@ -11,26 +12,60 @@ const FString PoseAILiveLinkServer::fieldPrettyName = FString(TEXT("userName"));
 const FString PoseAILiveLinkServer::fieldVersion = FString(TEXT("version"));
 
 
+FSocket* BuildUdpSocket(FString& description, FName protocolType, int32 port) {
+	
+	FName socketType = NAME_DGram;
+	FSocket* socket = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateSocket(socketType, description, protocolType);
+	socket->SetNonBlocking();
+	socket->SetReuseAddr();
+	int actualSize;
+	socket->SetReceiveBufferSize(64 * 1024, actualSize);
+	socket->SetSendBufferSize(64 * 1024, actualSize);
+
+	TSharedRef<FInternetAddr> sender = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr(protocolType);
+	sender->SetIp(0);
+	sender->SetPort(port);
+	socket->Bind(*sender);
+	return socket;
+}
+
+
 void PoseAILiveLinkServer::CreateServer(int32 port, PoseAIHandshake myHandshake) {
 	portNum = port;
 	UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Creating Server"));
-	serverSocket = FUdpSocketBuilder(FString("PoseAIServerSocket")).AsNonBlocking().AsReusable().BoundToPort(port).WithReceiveBufferSize(64 * 1024).WithSendBufferSize(64 * 1024).Build();
+	
+	FString serverName = "PoseAIServerSocketOnPort_" + FString::FromInt(port);
+	serverSocket = BuildUdpSocket(serverName, protocolType, port);
+		
 	poseAILiveLinkRunnable = MakeShared<PoseAILiveLinkRunnable, ESPMode::ThreadSafe>(port, this);
-	FString senderName = "PoseAILiveLink_Sender_On_Port_" + FString::FromInt(port);
+	FString senderName = "PoseAILiveLinkSenderOnPort_" + FString::FromInt(port);
 	udpSocketSender = MakeShared<FPoseAISocketSender, ESPMode::ThreadSafe>(serverSocket, *senderName);
 	handshake = myHandshake;
 
 	FString myIP;
-	if (GetIP(myIP)) {
-		UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Created Server on %s Port:%d"), *myIP, port);
+	if (protocolType == FNetworkProtocolTypes::IPv6) {
+		UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Created Server on IPv6 link-Local address (begins with fe80:) and Port:%d"), port);
+	} else if (GetIP(myIP)) {
+		UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Created Server on %s Port:%d"), *myIP, port);				
 	} else {
 		UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Created Server but can't determine your IP address.  You may not have a valid network adapter."));
 	}
 }
 
+
 bool PoseAILiveLinkServer::GetIP(FString& myIP) {
+	/* was trying to find IPv6 addresses too for display to console but only shows IPv4
+	TArray<TSharedPtr<FInternetAddr>> OutAddresses;
+	if (ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->GetLocalAdapterAddresses(OutAddresses)) {
+		for (auto& addr : OutAddresses) {
+			UE_LOG(LogTemp, Display, TEXT("POSEAI address: %s"), *(addr->ToString(true)));
+		}
+	}
+	*/
+
 	bool canBind = false;
 	TSharedRef<FInternetAddr> localIp = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->GetLocalHostAddr(*GLog, canBind);
+	
 	if (localIp->IsValid()) {
 		myIP = (localIp->ToString(false));
 		return true;
@@ -84,7 +119,7 @@ void PoseAILiveLinkServer::CleanUpSocket() {
 	}
 }
 
-void PoseAILiveLinkServer::ReceiveUDPDelegate(const FArrayReaderPtr& arrayReaderPtr, const FIPv4Endpoint& endpoint) {
+void PoseAILiveLinkServer::ReceiveUDPDelegate(const FArrayReaderPtr& arrayReaderPtr, const FPoseAIEndpoint& endpoint) {
 	if (cleaningUp)
 		return;
 
@@ -137,7 +172,7 @@ void PoseAILiveLinkServer::ReceiveUDPDelegate(const FArrayReaderPtr& arrayReader
 	}
 }
 
-void PoseAILiveLinkServer::SendHandshake(const FIPv4Endpoint& endpoint) const {
+void PoseAILiveLinkServer::SendHandshake(const FPoseAIEndpoint& endpoint) const {
 	FTCHARToUTF8 byteConvert(*handshake.ToString());
 	TSharedRef<TArray<uint8>, ESPMode::ThreadSafe> bytedata = MakeShared<TArray<uint8>, ESPMode::ThreadSafe>();
 	bytedata->Append((uint8*)byteConvert.Get(), byteConvert.Length());;

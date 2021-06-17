@@ -42,7 +42,8 @@ protected:
 
 private:
 	const static FString section;
-	static int32 portNum;
+	static int32 portNumIPv4;
+	static int32 portNumIPv6;
 	static int32 syncFPS;
 	static int32 cameraFPS;
 	static int32 modeIndex;
@@ -50,10 +51,12 @@ private:
 	static bool isMirrored;
 	static bool useRootMotion;
 
-	void UpdatePort(const FText& InText, ETextCommit::Type type);
+	void UpdatePortIPv4(const FText& InText, ETextCommit::Type type);
+	void UpdatePortIPv6(const FText& InText, ETextCommit::Type type);
 	void UpdateSyncFPS(const FText& InText, ETextCommit::Type type);
 	void UpdateCameraFPS(const FText& InText, ETextCommit::Type type);
-	void SetPortNum(int32 portNum);
+	bool ArePortsValid() const;
+
 	FReply OnOkClicked();
 	FReply OnToggleModeClicked();
 
