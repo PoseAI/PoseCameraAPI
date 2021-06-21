@@ -60,9 +60,9 @@ void PoseAILiveLinkSource::AddSubject(FName name)
 	subject.VirtualSubject = nullptr;
 	
 	critSection.Lock(); lockedAt = __LINE__;
+	liveLinkClient->RemoveSubject_AnyThread(subject.Key); // try to remove from client even if untracked here for case where preset loaded name
 	if (subjectKeys.Find(name) != 0) {
 		UE_LOG(LogTemp, Display, TEXT("PoseAILiveLink: replacing %s with new connection"), *(name.ToString()));
-		liveLinkClient->RemoveSubject_AnyThread(subjectKeys[name]);
 		subjectKeys.Remove(name);
 	}
 	UE_LOG(LogTemp, Display, TEXT("PoseAIiveLink: adding %s to subjects"), *(name.ToString()));

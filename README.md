@@ -19,7 +19,7 @@ We provde a simple python example server which connects to the app and just prin
 4. Make sure you have entered the correct local IP address into the mobile app for the connecting machine (often in the form of 192.xxx.x.xxx using IPv4).  For convenience the UE4 PoseAI plugin will show your local IP address in the LiveLink console and the python demo prints your IP address to console. 
 5. On an IPv6 network try using the local-link address (starting with FE80: and, at least on our network, stopping before the % sign in the address)
 
-# Frames per second, heating and performance
+# Frames per second, heating and phone performance
 Better embedded chip hardware in newer phones can significantly improve the performance.  Also, iPhones throttle the speed when the battery is worn or the phone runs hot.  
 - An iPhone 12 should routinely be able to process 60 camera frames per second into motion capture data for sustained periods of time. 
 - An iPhone 8 or X should be able to proccess approximately 50 out of the camera's 60 frames per second for an initial period.  However, the high computation load will likely cause the phone to heat up after a few minutes and the operating system is likely to throttle the speed of the app at some point to maintain a cooler temperature. 
@@ -29,3 +29,6 @@ Depending on use case, more frames is not always better.  Aiming for a 30 frame 
 If hand animations are unnecessary, use the body only models to reduce computations.
 The app can stream at a user specified speed, interpolating the frames to deliver a smooth performance.  For example, the user can capture at a 30 fps camera speed but stream interpolated motion capture data at 60 fps.  However, higher streaming rates more heavily utilize the wireless chip on the phone.  If interpolation is not necessary or is being handled on the paired application, consider reducing the stream rate to save battery and heating.
 Try turning off the camera preview on the phone (tap the yellow person icon at the edge of the screen) once properly positioned as this may help reduce the strain on the phone.
+
+# Latency and Unreal LiveLink
+Please note that the speed of the machine running LiveLink can have a significant impact on the latency of the animation.   While on a high powered desktop Unreal is able to process the incoming animations almost instantly, in our tests running Unreal on an ultrabook (without dedicated GPU), the lag was noticably several hundred milliseconds.
