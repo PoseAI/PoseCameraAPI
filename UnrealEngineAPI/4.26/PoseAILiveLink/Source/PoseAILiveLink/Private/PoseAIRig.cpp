@@ -203,10 +203,16 @@ bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLink
 		if (useRootMotion) {
 			//hip to low point Z distance assigned to hips, rest of movement assigned to root
 			data.Transforms[1].SetTranslation(FVector(0.0f, 0.0f, -minZ));
-			baseTranslation.Z = FGenericPlatformMath::Max(baseTranslation.Z + verticalAdjustment + minZ, 0.0f);
+			baseTranslation.Z = FGenericPlatformMath::Min(
+				FGenericPlatformMath::Max(baseTranslation.Z + verticalAdjustment + minZ, 0.0f),
+				rigHeight*0.5f // a safety min
+			); 
 			data.Transforms[0].SetTranslation(baseTranslation);
 		} else {
-			baseTranslation.Z = FGenericPlatformMath::Max(baseTranslation.Z + verticalAdjustment, -minZ);
+			baseTranslation.Z = FGenericPlatformMath::Min(
+				FGenericPlatformMath::Max(baseTranslation.Z + verticalAdjustment, -minZ),
+				rigHeight * 0.5f - minZ // a safety min
+			);
 			data.Transforms[1].SetTranslation(baseTranslation);
 		}
 		CachePose(data.Transforms);
