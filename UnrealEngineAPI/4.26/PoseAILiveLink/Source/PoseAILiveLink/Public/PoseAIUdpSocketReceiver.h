@@ -1,3 +1,4 @@
+// Pose AI Ltd Copyright 2021
 // This is a minor edit of Epic Games FUdpSocetReceiver class to allow different protocols (like IPv6)
 
 #pragma once

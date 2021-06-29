@@ -1,4 +1,4 @@
-// Copyright Pose AI Ltd. All Rights Reserved.
+// Copyright Pose AI Ltd 2021. All Rights Reserved.
 
 #include "PoseAILiveLinkRetargetRotations.h"
 

@@ -3,12 +3,12 @@
 	"Version": 1,
 	"VersionName": "1.0",
 	"FriendlyName": "PoseAI LiveLink",
-	"Description": "Live Link plugin to stream from the PoseAI mobile app",
+	"Description": "Live Link plugin to stream from the Pose Camera mobile app by PoseAI",
 	"Category": "Animation",
 	"CreatedBy": "Pose AI Ltd",
 	"CreatedByURL": "www.pose-ai.com",
-	"DocsURL": "github.com/PoseAI/PoseCameraAPI",
-	"MarketplaceURL": "",
+	"DocsURL": "www.pose-ai.com/unreal-engine-livelink",
+	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/3db8f23ad003492eb85a50de31e5bc57",
 	"SupportURL": "support@pose-ai.com",
 	"EngineVersion": "4.25.0",
 	"CanContainContent": false,
@@ -21,8 +21,7 @@
 			"Type": "Runtime",
 			"LoadingPhase": "Default",
 			"WhitelistPlatforms": [
-				"Win64",
-				"Win32"
+				"Win64"
 			]
 		}
 	],
