@@ -69,7 +69,7 @@ bool PoseAIRig::IsFrameData(const TSharedPtr<FJsonObject> jsonObject)
 		
 }
 
-bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLinkFrameDataStruct& frameData)
+bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLinkAnimationFrameData& data)
 {
 	const TSharedPtr < FJsonObject >* objBody;
 	const TSharedPtr < FJsonObject >* objHandLeft;
@@ -93,7 +93,6 @@ bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLink
 		vecBody = nullptr;
 	}
 
-	FLiveLinkAnimationFrameData& data = *frameData.Cast<FLiveLinkAnimationFrameData>();
 	data.WorldTime = FPlatformTime::Seconds();
 
 	if (rotBody == nullptr && cachedPose.Num() < 1) {
@@ -221,7 +220,7 @@ bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLink
 }
 
 void PoseAIRig::CachePose(const TArray<FTransform>& transforms) {
-	cachedPose.Empty();
+	//cachedPose.Empty();
 	cachedPose = TArray<FTransform>(transforms);
 }
 

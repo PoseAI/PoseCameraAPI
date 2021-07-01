@@ -173,7 +173,9 @@ void PoseAILiveLinkSource::UpdatePose(FName& name, TSharedPtr<FJsonObject> jsonP
 	}
 	TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> rig = *(rigs.Find(name));
 	FLiveLinkFrameDataStruct frameData(FLiveLinkAnimationFrameData::StaticStruct());
-	if (rig != nullptr && rig->ProcessFrame(jsonPose, frameData)) {
+	FLiveLinkAnimationFrameData& data = *frameData.Cast<FLiveLinkAnimationFrameData>();
+	data.Transforms.Reserve(100);
+	if (rig != nullptr && rig->ProcessFrame(jsonPose, data)) {
 		liveLinkClient->PushSubjectFrameData_AnyThread(subjectKeys[name], MoveTemp(frameData));
 	}
 }

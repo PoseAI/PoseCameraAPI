@@ -21,7 +21,7 @@ class POSEAILIVELINK_API PoseAIRig
 
 	FLiveLinkStaticDataStruct rig;
 	FLiveLinkStaticDataStruct MakeStaticData();
-	bool ProcessFrame(const TSharedPtr<FJsonObject>, FLiveLinkFrameDataStruct& frameData);
+	bool ProcessFrame(const TSharedPtr<FJsonObject>, FLiveLinkAnimationFrameData& data);
 	static bool IsFrameData(const TSharedPtr<FJsonObject> jsonObject);
 	static TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> PoseAIRigFactory(FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop);
 
