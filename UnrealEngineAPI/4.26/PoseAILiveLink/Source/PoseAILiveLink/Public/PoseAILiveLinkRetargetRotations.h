@@ -22,7 +22,7 @@ class POSEAILIVELINK_API UPoseAILiveLinkRetargetRotations : public ULiveLinkReta
 	//~ End ULiveLinkRetargetAsset interface
 
 	// allow user to scale translations for differences in skeleton sizes
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category = Settings)
 	float scaleTranslation = 1.0f;
 
 private:
