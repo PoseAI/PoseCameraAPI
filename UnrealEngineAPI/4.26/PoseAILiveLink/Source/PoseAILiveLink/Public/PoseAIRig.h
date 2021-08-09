@@ -45,7 +45,7 @@ class POSEAILIVELINK_API PoseAIRig
 
 	/* sets up skeletal heirarchy and provides default locations for each transform based on default skeleton (i.e. UE4 Mannequen or male Metahuman).
 	   These bone lengths ensure a sensible animation is created even if user does not retarget from livelink */
-	virtual void Configure()=0;
+	virtual void Configure(); //impure for MacOS compatibility
 	
 
 	FName rigType;
