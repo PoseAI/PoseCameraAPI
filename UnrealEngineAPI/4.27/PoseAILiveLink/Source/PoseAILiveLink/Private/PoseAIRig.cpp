@@ -3,6 +3,7 @@
 #include "PoseAIRig.h"
 
 
+
 const FString PoseAIRig::fieldBody = FString(TEXT("Body"));
 const FString PoseAIRig::fieldRigType = FString(TEXT("Rig"));
 const FString PoseAIRig::fieldHandLeft = FString(TEXT("LeftHand"));
@@ -15,6 +16,7 @@ const FString PoseAIRig::fieldBodyHeight = FString(TEXT("BodyHeight"));
 const FString PoseAIRig::fieldStableFoot = FString(TEXT("StableFoot"));
 const FString PoseAIRig::fieldShrugLeft = FString(TEXT("ShrugL"));
 const FString PoseAIRig::fieldShrugRight = FString(TEXT("ShrugR"));
+
 
 
 PoseAIRig::PoseAIRig(FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop) :
@@ -79,6 +81,8 @@ bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLink
 	const TSharedPtr < FJsonObject >* vecBody;
 	const TSharedPtr < FJsonObject >* rotHandLeft;
 	const TSharedPtr < FJsonObject >* rotHandRight;
+    const TSharedPtr < FJsonObject >* vecHandLeft;
+    const TSharedPtr < FJsonObject >* vecHandRight;
 
 	if (jsonObject->TryGetObjectField(fieldBody, objBody)) {
 		if (!(*objBody)->TryGetObjectField(fieldRotations, rotBody))
@@ -92,7 +96,34 @@ bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLink
 		scaBody = nullptr;
 		vecBody = nullptr;
 	}
+    if (jsonObject->TryGetObjectField(fieldHandLeft, objHandLeft)){
+        if (!(*objHandLeft)->TryGetObjectField(fieldRotations, rotHandLeft))
+            rotHandLeft = nullptr;
+        if (!(*objHandLeft)->TryGetObjectField(fieldVectors, vecHandLeft))
+            vecHandLeft = nullptr;
+    } else {
+        objHandLeft = nullptr;
+        rotHandLeft = nullptr;
+        vecHandLeft = nullptr;
+    }
+    if (jsonObject->TryGetObjectField(fieldHandRight, objHandRight)){
+        if (!(*objHandRight)->TryGetObjectField(fieldRotations, rotHandRight))
+            rotHandRight = nullptr;
+        if (!(*objHandRight)->TryGetObjectField(fieldVectors, vecHandRight))
+            vecHandRight = nullptr;
+    } else {
+        objHandRight = nullptr;
+        rotHandRight = nullptr;
+        vecHandRight = nullptr;
+    }
 
+    visibilityFlags.ProcessUpdate(scaBody);
+    liveValues.ProcessUpdateScalarsBody(scaBody);
+    liveValues.ProcessUpdateVectorsBody(vecBody);
+    liveValues.ProcessUpdateVectorsHandLeft(vecHandLeft);
+    liveValues.ProcessUpdateVectorsHandRight(vecHandRight);
+
+    
 	data.WorldTime = FPlatformTime::Seconds();
 
 	if (rotBody == nullptr && cachedPose.Num() < 1) {
@@ -112,15 +143,6 @@ bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLink
 		} else {
 			UE_LOG(LogTemp, Warning, TEXT("PoseAI LiveLink: Can't get rig field."));
 		}
-
-
-		if (!(jsonObject->TryGetObjectField(fieldHandLeft, objHandLeft) &&
-			(*objHandLeft)->TryGetObjectField(fieldRotations, rotHandLeft)))
-			rotHandLeft = nullptr;
-
-		if (!(jsonObject->TryGetObjectField(fieldHandRight, objHandRight) &&
-			(*objHandRight)->TryGetObjectField(fieldRotations, rotHandRight)))
-			rotHandRight = nullptr;
 
 		const TArray < TSharedPtr < FJsonValue > >* hipScreen;
 		double bodyHeight;

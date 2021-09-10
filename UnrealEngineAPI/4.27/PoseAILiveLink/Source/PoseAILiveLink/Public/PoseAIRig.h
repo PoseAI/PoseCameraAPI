@@ -7,6 +7,7 @@
 #include "ILiveLinkSource.h"
 #include "LiveLinkSubjectSettings.h"
 #include "Json.h"
+#include "PoseAIStructs.h"
 
 
 #define LOCTEXT_NAMESPACE "PoseAI"
@@ -24,7 +25,9 @@ class POSEAILIVELINK_API PoseAIRig
 	bool ProcessFrame(const TSharedPtr<FJsonObject>, FLiveLinkAnimationFrameData& data);
 	static bool IsFrameData(const TSharedPtr<FJsonObject> jsonObject);
 	static TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> PoseAIRigFactory(FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop);
-
+    FPoseAIVisibilityFlags visibilityFlags;
+    FPoseAILiveValues liveValues;
+    
   protected:
 	static const FString fieldBody;
 	static const FString fieldRigType;

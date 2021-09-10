@@ -11,6 +11,7 @@
 #include "PoseAIRig.h"
 #include "PoseAILiveLinkServer.h"
 #include "PoseAIHandshake.h"
+#include "PoseAIEventDispatcher.h"
 
 
 #define LOCTEXT_NAMESPACE "PoseAI"
@@ -42,7 +43,7 @@ public:
 		return LOCTEXT("SourceType", "PoseAI mobile");
 	}
 	virtual FText GetSourceMachineName() const {
-		return LOCTEXT("SourceNachineName", "Unreal Engine");;
+		return LOCTEXT("SourceMachineName", "Unreal Engine");;
 	}
 	virtual FText GetSourceStatus() const { return status; }
 
@@ -54,6 +55,8 @@ public:
 	void AddSubject(FName name);
 	void UpdatePose(FName& name, TSharedPtr<FJsonObject> jsonPose);
 	static bool IsValidPort(int32 port);
+    
+    
 
 private:
 	int32 portIPv4;
@@ -71,6 +74,8 @@ private:
 
 	bool enabled;
 	mutable FText status;
+    
+    static UPoseAIEventDispatcher* eventDispatcher;
 
 	/* create two different server objects if user wants both IPv4 and IPv6, as not all systems allow dual sockets*/
 	TSharedPtr<PoseAILiveLinkServer, ESPMode::ThreadSafe> udpServerIPv4;
@@ -82,5 +87,7 @@ private:
 	FGuid sourceGuid;
 
 	TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> MakeRig();
+    
+    
 	
 };

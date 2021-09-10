@@ -2,7 +2,7 @@
 
 #include "PoseAILiveLink.h"
 
-#define LOCTEXT_NAMESPACE "FPoseAILiveLinkModule"
+//#define LOCTEXT_NAMESPACE "FPoseAILiveLinkModule"
 
 void FPoseAILiveLinkModule::StartupModule()
 {
@@ -15,6 +15,6 @@ void FPoseAILiveLinkModule::ShutdownModule()
 	// we call this function before unloading the module.
 }
 
-#undef LOCTEXT_NAMESPACE
+//#undef LOCTEXT_NAMESPACE
 	
 IMPLEMENT_MODULE(FPoseAILiveLinkModule, PoseAILiveLink)

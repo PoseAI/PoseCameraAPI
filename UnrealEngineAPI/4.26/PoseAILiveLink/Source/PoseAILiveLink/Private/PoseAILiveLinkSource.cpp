@@ -10,6 +10,7 @@
 static int lockedAt;
 static int unlockedAt;
 static FCriticalSection critSection; 
+UPoseAIEventDispatcher* PoseAILiveLinkSource::eventDispatcher = UPoseAIEventDispatcher::GetDispatcher();
 
 
 PoseAILiveLinkSource::PoseAILiveLinkSource(int32 inIPv4port, int32 inIPv6port, const PoseAIHandshake& handshake, bool useRootMotion) :
@@ -172,10 +173,16 @@ void PoseAILiveLinkSource::UpdatePose(FName& name, TSharedPtr<FJsonObject> jsonP
 		return;
 	}
 	TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> rig = *(rigs.Find(name));
+    if (rig == nullptr)
+        return;
 	FLiveLinkFrameDataStruct frameData(FLiveLinkAnimationFrameData::StaticStruct());
 	FLiveLinkAnimationFrameData& data = *frameData.Cast<FLiveLinkAnimationFrameData>();
 	data.Transforms.Reserve(100);
-	if (rig != nullptr && rig->ProcessFrame(jsonPose, data)) {
+	if (rig->ProcessFrame(jsonPose, data)) {
 		liveLinkClient->PushSubjectFrameData_AnyThread(subjectKeys[name], MoveTemp(frameData));
 	}
+    if (rig->visibilityFlags.HasChanged()) {
+        eventDispatcher->BroadcastVisibilityChange(name, rig->visibilityFlags);
+    }
+    eventDispatcher->BroadcastLiveValues(name, rig->liveValues);
 }
