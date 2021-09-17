@@ -1,10 +1,8 @@
 // Copyright Pose AI Ltd 2021
 
 #include "PoseAILiveLinkServer.h"
-#include "Json.h"
 #include "PoseAIRig.h"
-#include "LiveLinkLog.h"
-#include "SocketTypes.h"
+
 
 
 const FString PoseAILiveLinkServer::requiredMinVersion = FString(TEXT("0.8.0"));

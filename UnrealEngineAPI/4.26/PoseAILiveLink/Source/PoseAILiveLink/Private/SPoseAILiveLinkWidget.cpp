@@ -1,17 +1,12 @@
 // Copyright Pose AI 2021.  All rights reserved
 
 #include "SPoseAILiveLinkWidget.h"
-#include "SlateOptMacros.h"
-#include "Widgets/SBoxPanel.h"
-#include "Widgets/Text/STextBlock.h"
 #include "PoseAILiveLinkSourceFactory.h"
-#include "CoreGlobals.h"
-#include "Misc/ConfigCacheIni.h"
-#include "LiveLinkLog.h"
+#include "PoseAILiveLinkSource.h"
 
 #define LOCTEXT_NAMESPACE "PoseAI"
 
-TWeakPtr<ILiveLinkSource> SPoseAILiveLinkWidget::source;
+TWeakPtr<ILiveLinkSource> SPoseAILiveLinkWidget::source = nullptr;
 
 static TArray<FString> PoseAI_Modes = { "Room", "Desktop", "Portrait", "RoomBodyOnly", "PortraitBodyOnly" };
 static TArray<FString> PoseAI_Rigs = { "UE4", "MetaHuman", "Mixamo" };

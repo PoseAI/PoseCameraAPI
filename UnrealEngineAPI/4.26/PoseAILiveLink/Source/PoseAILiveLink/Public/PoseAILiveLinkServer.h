@@ -6,6 +6,10 @@
 #include "Runtime/Networking/Public/Networking.h"
 #include "Runtime/Sockets/Public/Sockets.h"
 #include "Runtime/Sockets/Public/SocketSubsystem.h"
+#include "HAL/RunnableThread.h"
+#include "LiveLinkLog.h"
+#include "SocketTypes.h"
+#include "Interfaces/IPv4/IPv4Endpoint.h"
 #include "IPAddress.h"
 #include "Json.h"
 #include "PoseAIHandshake.h"
@@ -60,14 +64,14 @@ private:
 
 	FName protocolType;
 	int32 portNum;
-	FSocket* serverSocket;
+	FSocket* serverSocket = nullptr;
 
 	//used to launch receiver without slowing main thread
-	TSharedPtr<PoseAILiveLinkRunnable, ESPMode::ThreadSafe> poseAILiveLinkRunnable;
+	TSharedPtr<PoseAILiveLinkRunnable, ESPMode::ThreadSafe> poseAILiveLinkRunnable = nullptr;
 	//Listens for packets
-	TSharedPtr<FPoseAIUdpSocketReceiver, ESPMode::ThreadSafe> udpSocketReceiver;
+	TSharedPtr<FPoseAIUdpSocketReceiver, ESPMode::ThreadSafe> udpSocketReceiver = nullptr;
 	//sends instructions to paired app
-	TSharedPtr<FPoseAISocketSender, ESPMode::ThreadSafe> udpSocketSender;
+	TSharedPtr<FPoseAISocketSender, ESPMode::ThreadSafe> udpSocketSender = nullptr;
 	FPoseFrameDelegate poseFrameDelegate;
 	TMap<FString, FPoseAIEndpoint> knownSockets;
 	TMap<FString, FName> prettyNames;
@@ -120,9 +124,9 @@ public:
 protected:
 	FString myName;
 	int32 port;
-	FRunnableThread* thread;
+	FRunnableThread* thread = nullptr;
 private:
-	PoseAILiveLinkServer* poseAILiveLinkServer;
+	PoseAILiveLinkServer* poseAILiveLinkServer = nullptr;
 };
 
 
@@ -133,7 +137,7 @@ class POSEAILIVELINK_API FPoseAISocketSender : public FRunnable
 	struct FPacket
 	{
 		/** Holds the packet's data. */
-		TSharedPtr<TArray<uint8>, ESPMode::ThreadSafe> Data;
+		TSharedPtr<TArray<uint8>, ESPMode::ThreadSafe> Data = nullptr;
 
 		/** Holds the recipient. */
 		FPoseAIEndpoint Recipient;

@@ -6,6 +6,7 @@
 #include "GenericPlatform/GenericPlatformMath.h"
 #include "ILiveLinkSource.h"
 #include "LiveLinkSubjectSettings.h"
+#include "Roles/LiveLinkAnimationTypes.h"
 #include "Json.h"
 #include "PoseAIStructs.h"
 

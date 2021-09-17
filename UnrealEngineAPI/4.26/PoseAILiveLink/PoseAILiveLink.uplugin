@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "1.1",
+	"VersionName": "1.11",
 	"FriendlyName": "PoseAI LiveLink",
 	"Description": "Live Link plugin to stream from the Pose Camera mobile app by PoseAI",
 	"Category": "Animation",
@@ -13,15 +13,15 @@
 	"EngineVersion": "4.26.0",
 	"CanContainContent": false,
 	"IsBetaVersion": true,
-	"IsExperimentalVersion": false,
-	"Installed": false,
+	"Installed": true,
 	"Modules": [
 		{
 			"Name": "PoseAILiveLink",
 			"Type": "Runtime",
 			"LoadingPhase": "Default",
 			"WhitelistPlatforms": [
-				"Win64", "Mac"
+				"Win64",
+				"Mac"
 			]
 		}
 	],
@@ -31,5 +31,4 @@
 			"Enabled": true
 		}
 	]
-
 }

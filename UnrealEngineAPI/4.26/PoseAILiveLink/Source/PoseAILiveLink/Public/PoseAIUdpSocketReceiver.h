@@ -10,6 +10,7 @@
 #include "Serialization/ArrayReader.h"
 #include "Sockets.h"
 #include "SocketSubsystem.h"
+#include "Interfaces/IPv4/IPv4Endpoint.h"
 
 #include "PoseAIEndpoint.h"
 #include "IPAddress.h"
@@ -170,16 +171,16 @@ protected:
 private:
 
 	/** The network socket. */
-	FSocket* Socket;
+	FSocket* Socket = nullptr;
 
 	/** Pointer to the socket sub-system. */
-	ISocketSubsystem* SocketSubsystem;
+	ISocketSubsystem* SocketSubsystem = nullptr;
 
 	/** Flag indicating that the thread is stopping. */
 	bool Stopping;
 
 	/** The thread object. */
-	FRunnableThread* Thread;
+	FRunnableThread* Thread = nullptr;
 
 	/** The receiver thread's name. */
 	FString ThreadName;
