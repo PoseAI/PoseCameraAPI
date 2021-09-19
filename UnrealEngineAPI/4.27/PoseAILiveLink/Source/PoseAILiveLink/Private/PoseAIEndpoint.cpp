@@ -2,16 +2,7 @@
 
 #include "PoseAIEndpoint.h"
 
-/* helper function to generate address*/
-TSharedRef<FInternetAddr> GetAny() {
-	FName protocolType = FNetworkProtocolTypes::IPv6;
-	TSharedRef<FInternetAddr> Sender = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr(protocolType);
-	Sender->SetIp(0);
-	Sender->SetPort(0);
-	return Sender;
-}
 
-const FPoseAIEndpoint FPoseAIEndpoint::Any(GetAny());
 ISocketSubsystem* FPoseAIEndpoint::CachedSocketSubsystem = nullptr;
 
 

@@ -32,8 +32,8 @@ public class PoseAILiveLink : ModuleRules
 				"Projects",
 				"Networking",
 				"Sockets",
-				"LiveLinkInterface",
 				"LiveLink",
+				"LiveLinkInterface",
 				"Json",
 				// ... add other public dependencies that you statically link with here ...
 			}
@@ -56,5 +56,7 @@ public class PoseAILiveLink : ModuleRules
 				// ... add any modules that your module loads dynamically here ...
 			}
 			);
+		// PublicDefinitions.Add("WINDOWS_IGNORE_PACKING_MISMATCH");
+
 	}
 }

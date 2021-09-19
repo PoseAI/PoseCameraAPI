@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "IPAddress.h"
+#include "Interfaces/IPv4/IPv4Endpoint.h"
+
 #include "SocketSubsystem.h"
 
 /**
@@ -108,16 +110,11 @@ public:
 public:
 
 	/** Initializes the IP endpoint functionality. */
-	static POSEAILIVELINK_API void Initialize();
+	static void Initialize();
 
-	
 
-public:
-
-	/** Defines the wild card endpoint */
-	static POSEAILIVELINK_API const FPoseAIEndpoint Any;
 
 private:
 	/** ISocketSubsystem::Get() is not thread-safe, so we cache it here. */
-	static POSEAILIVELINK_API ISocketSubsystem* CachedSocketSubsystem;
+	static ISocketSubsystem* CachedSocketSubsystem;
 };

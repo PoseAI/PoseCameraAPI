@@ -1,16 +1,12 @@
 // Copyright Pose AI Ltd 2021
 
 #include "PoseAILiveLinkSource.h"
-#include "ILiveLinkClient.h"
-#include "Roles/LiveLinkAnimationRole.h"
-#include "HAL/RunnableThread.h"
-#include "LiveLinkLog.h"
+
 
 
 static int lockedAt;
 static int unlockedAt;
 static FCriticalSection critSection; 
-UPoseAIEventDispatcher* PoseAILiveLinkSource::eventDispatcher = UPoseAIEventDispatcher::GetDispatcher();
 
 
 PoseAILiveLinkSource::PoseAILiveLinkSource(int32 inIPv4port, int32 inIPv6port, const PoseAIHandshake& handshake, bool useRootMotion) :
@@ -182,7 +178,7 @@ void PoseAILiveLinkSource::UpdatePose(FName& name, TSharedPtr<FJsonObject> jsonP
 		liveLinkClient->PushSubjectFrameData_AnyThread(subjectKeys[name], MoveTemp(frameData));
 	}
     if (rig->visibilityFlags.HasChanged()) {
-        eventDispatcher->BroadcastVisibilityChange(name, rig->visibilityFlags);
+		UPoseAIEventDispatcher::GetDispatcher()->BroadcastVisibilityChange(name, rig->visibilityFlags);
     }
-    eventDispatcher->BroadcastLiveValues(name, rig->liveValues);
+	UPoseAIEventDispatcher::GetDispatcher()->BroadcastLiveValues(name, rig->liveValues);
 }

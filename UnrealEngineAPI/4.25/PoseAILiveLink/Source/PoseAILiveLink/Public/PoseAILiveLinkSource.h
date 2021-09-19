@@ -4,13 +4,21 @@
 
 #include "CoreMinimal.h"
 #include "ILiveLinkSource.h"
+#include "ILiveLinkClient.h"
+#include "LiveLinkSourceSettings.h"
 #include "LiveLinkSubjectSettings.h"
 #include "LiveLinkFrameInterpolationProcessor.h"
 #include "LiveLinkFramePreProcessor.h"
 #include "LiveLinkFrameTranslator.h"
+#include "Roles/LiveLinkAnimationRole.h"
+#include "LiveLinkTypes.h"
+#include "LiveLinkLog.h"
+#include "HAL/RunnableThread.h"
+#include "Json.h"
 #include "PoseAIRig.h"
 #include "PoseAILiveLinkServer.h"
 #include "PoseAIHandshake.h"
+
 #include "PoseAIEventDispatcher.h"
 
 
@@ -65,7 +73,7 @@ private:
 	static TArray<int32> usedPorts;
 
 	ILiveLinkClient* liveLinkClient = nullptr;
-	ILiveLinkClient* client;
+	ILiveLinkClient* client = nullptr;
 	
 	const PoseAIHandshake handshake;
 
@@ -75,11 +83,9 @@ private:
 	bool enabled;
 	mutable FText status;
     
-    static UPoseAIEventDispatcher* eventDispatcher;
-
 	/* create two different server objects if user wants both IPv4 and IPv6, as not all systems allow dual sockets*/
-	TSharedPtr<PoseAILiveLinkServer, ESPMode::ThreadSafe> udpServerIPv4;
-	TSharedPtr<PoseAILiveLinkServer, ESPMode::ThreadSafe> udpServerIPv6;
+	TSharedPtr<PoseAILiveLinkServer, ESPMode::ThreadSafe> udpServerIPv4 = nullptr;
+	TSharedPtr<PoseAILiveLinkServer, ESPMode::ThreadSafe> udpServerIPv6 = nullptr;
 	
 	TMap<FName, FLiveLinkSubjectKey> subjectKeys = {};
 	TMap<FName, TSharedPtr<PoseAIRig, ESPMode::ThreadSafe>> rigs = {};

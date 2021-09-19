@@ -25,10 +25,18 @@ GENERATED_BODY()
 public:
     UFUNCTION(BlueprintCallable, Category = "PoseAI Events")
     static UPoseAIEventDispatcher* GetDispatcher() {
-        static UPoseAIEventDispatcher* theInstance = NewObject<UPoseAIEventDispatcher>();
-        theInstance->AddToRoot();
+        if (theInstance==nullptr) {
+            theInstance = NewObject<UPoseAIEventDispatcher>();
+            theInstance->AddToRoot();
+            UE_LOG(LogTemp, Display, TEXT("PoseAILiveLink: Creating EventDispatcher."));
+
+        }
         return theInstance;
     }
+
+  
+
+    
 
     UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
     FPoseAIVisibilityChange visibilityChange;
@@ -41,5 +49,6 @@ public:
     void BroadcastLiveValues(FName& rigName, FPoseAILiveValues& values);
 
 private:
+    static UPoseAIEventDispatcher* theInstance;
     UPoseAIEventDispatcher() : UObject() {};
 };

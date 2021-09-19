@@ -116,8 +116,5 @@ public:
 
 private:
 	/** ISocketSubsystem::Get() is not thread-safe, so we cache it here. */
-	UPROPERTY()
 	static ISocketSubsystem* CachedSocketSubsystem;
-	static TSharedRef<FInternetAddr>  GetAny();
-
 };

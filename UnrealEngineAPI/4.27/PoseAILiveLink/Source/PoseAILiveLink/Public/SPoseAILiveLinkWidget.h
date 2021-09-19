@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "CoreGlobals.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Input/SEditableTextBox.h"
@@ -10,6 +11,11 @@
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SCheckBox.h"
 #include "Widgets/Layout/SBox.h"
+#include "Types/WidgetActiveTimerDelegate.h"
+#include "SlateOptMacros.h"
+#include "Misc/ConfigCacheIni.h"
+#include "LiveLinkLog.h"
+#include "iLiveLinkSource.h"
 #include "LiveLinkSourceFactory.h"
 #include "IPAddress.h"
 #include "PoseAIHandshake.h"
@@ -61,14 +67,14 @@ private:
 	FReply OnToggleModeClicked();
 	FReply OnToggleRigClicked();
 
-	TSharedPtr<SEditableTextBox> portInput;
-	TSharedPtr<SEditableTextBox> syncFpsInput;
-	TSharedPtr<SEditableTextBox> cameraFpsInput;
-	TSharedPtr<STextBlock> modeInput;
-	TSharedPtr<STextBlock> rigInput;
-	TWeakPtr<SCheckBox> mirroredCheckBox;
-	TWeakPtr<SCheckBox> mixamoCheckBox;
-	TWeakPtr<SCheckBox> rootMotionCheckBox;
+	TSharedPtr<SEditableTextBox> portInput = nullptr;
+	TSharedPtr<SEditableTextBox> syncFpsInput = nullptr;
+	TSharedPtr<SEditableTextBox> cameraFpsInput = nullptr;
+	TSharedPtr<STextBlock> modeInput = nullptr;
+	TSharedPtr<STextBlock> rigInput = nullptr;
+	TWeakPtr<SCheckBox> mirroredCheckBox = nullptr;
+	TWeakPtr<SCheckBox> mixamoCheckBox = nullptr;
+	TWeakPtr<SCheckBox> rootMotionCheckBox = nullptr;
 
 	void ReadCheckBox(TWeakPtr<SCheckBox>& checkBox, bool& readTo);
 };

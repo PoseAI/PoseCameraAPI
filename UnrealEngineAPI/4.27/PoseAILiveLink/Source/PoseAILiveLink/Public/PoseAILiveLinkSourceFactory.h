@@ -3,7 +3,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "LiveLinkInterface/Public/LiveLinkSourceFactory.h"
+#include "LiveLinkSourceFactory.h"
+#include "ILiveLinkSource.h"
 #include "PoseAILiveLinkSourceFactory.generated.h"
 
 #define LOCTEXT_NAMESPACE "PoseAI"
