@@ -1,7 +1,7 @@
 // Copyright Pose AI Ltd 2021
 
 #include "PoseAIRig.h"
-
+#include "PoseAIEventDispatcher.h"
 
 
 const FString PoseAIRig::fieldBody = FString(TEXT("Body"));
@@ -10,30 +10,31 @@ const FString PoseAIRig::fieldHandLeft = FString(TEXT("LeftHand"));
 const FString PoseAIRig::fieldHandRight = FString(TEXT("RightHand"));
 const FString PoseAIRig::fieldRotations = FString(TEXT("Rotations"));
 const FString PoseAIRig::fieldScalars = FString(TEXT("Scalars"));
+const FString PoseAIRig::fieldEvents = FString(TEXT("Events"));
 const FString PoseAIRig::fieldVectors = FString(TEXT("Vectors"));
-const FString PoseAIRig::fieldHipScreen = FString(TEXT("HipScreen"));
-const FString PoseAIRig::fieldBodyHeight = FString(TEXT("BodyHeight"));
-const FString PoseAIRig::fieldStableFoot = FString(TEXT("StableFoot"));
-const FString PoseAIRig::fieldShrugLeft = FString(TEXT("ShrugL"));
-const FString PoseAIRig::fieldShrugRight = FString(TEXT("ShrugR"));
 
 
-
-PoseAIRig::PoseAIRig(FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop) :
-	rigType(rigType), useRootMotion(useRootMotion), includeHands(includeHands), isMirrored(isMirrored), isDesktop(isDesktop) {
-	Configure();
-	
+bool isDifferentAndSet(int32 newValue, int32& storedValue) {
+	bool isDifferent = newValue != storedValue;
+	storedValue = newValue;
+	return isDifferent;
 }
-TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> PoseAIRig::PoseAIRigFactory(FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop) {
+
+PoseAIRig::PoseAIRig(FName name, FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop) : 
+	name(name), rigType(rigType), useRootMotion(useRootMotion), includeHands(includeHands), isMirrored(isMirrored), isDesktop(isDesktop) {
+	Configure();
+}
+
+TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> PoseAIRig::PoseAIRigFactory(FName name, FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop) {
 	TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> rigPtr;
 	if (rigType == FName("Mixamo")) {
-		rigPtr = MakeShared<PoseAIRigMixamo, ESPMode::ThreadSafe>(rigType, useRootMotion, includeHands, isMirrored, isDesktop);
+		rigPtr = MakeShared<PoseAIRigMixamo, ESPMode::ThreadSafe>(name, rigType, useRootMotion, includeHands, isMirrored, isDesktop);
 	}
 	else if (rigType == FName("MetaHuman")) {
-		rigPtr = MakeShared<PoseAIRigMetaHuman, ESPMode::ThreadSafe>(rigType, useRootMotion, includeHands, isMirrored, isDesktop);
+		rigPtr = MakeShared<PoseAIRigMetaHuman, ESPMode::ThreadSafe>(name, rigType, useRootMotion, includeHands, isMirrored, isDesktop);
 	}
 	else {
-		rigPtr = MakeShared<PoseAIRigUE4, ESPMode::ThreadSafe>(rigType, useRootMotion, includeHands, isMirrored, isDesktop);;
+		rigPtr = MakeShared<PoseAIRigUE4, ESPMode::ThreadSafe>(name, rigType, useRootMotion, includeHands, isMirrored, isDesktop);;
 	}
 	rigPtr->Configure();
 	return rigPtr;
@@ -64,105 +65,281 @@ void PoseAIRig::AddBoneToLast(FName boneName, FVector translation) {
 	AddBone(boneName, lastBoneAdded, translation);
 }
 
-
 bool PoseAIRig::IsFrameData(const TSharedPtr<FJsonObject> jsonObject)
 {
-	return (jsonObject->HasField(fieldBody)) || (jsonObject->HasField(fieldHandLeft)) || (jsonObject->HasField(fieldHandRight));
-		
+	return (jsonObject->HasField(fieldBody)) || (jsonObject->HasField(fieldHandLeft)) || (jsonObject->HasField(fieldHandRight));	
 }
 
 bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLinkAnimationFrameData& data)
 {
-	const TSharedPtr < FJsonObject >* objBody;
-	const TSharedPtr < FJsonObject >* objHandLeft;
-	const TSharedPtr < FJsonObject >* objHandRight;
-	const TSharedPtr < FJsonObject >* rotBody;
-	const TSharedPtr < FJsonObject >* scaBody;
-	const TSharedPtr < FJsonObject >* vecBody;
-	const TSharedPtr < FJsonObject >* rotHandLeft;
-	const TSharedPtr < FJsonObject >* rotHandRight;
-    const TSharedPtr < FJsonObject >* vecHandLeft;
-    const TSharedPtr < FJsonObject >* vecHandRight;
-
-	if (jsonObject->TryGetObjectField(fieldBody, objBody)) {
-		if (!(*objBody)->TryGetObjectField(fieldRotations, rotBody))
-			rotBody = nullptr;
-		if (!(*objBody)->TryGetObjectField(fieldScalars, scaBody))
-			scaBody = nullptr;
-		if (!(*objBody)->TryGetObjectField(fieldVectors, vecBody))
-			vecBody = nullptr;
-	} else {
-		rotBody = nullptr;
-		scaBody = nullptr;
-		vecBody = nullptr;
-	}
-    if (jsonObject->TryGetObjectField(fieldHandLeft, objHandLeft)){
-        if (!(*objHandLeft)->TryGetObjectField(fieldRotations, rotHandLeft))
-            rotHandLeft = nullptr;
-        if (!(*objHandLeft)->TryGetObjectField(fieldVectors, vecHandLeft))
-            vecHandLeft = nullptr;
-    } else {
-        objHandLeft = nullptr;
-        rotHandLeft = nullptr;
-        vecHandLeft = nullptr;
-    }
-    if (jsonObject->TryGetObjectField(fieldHandRight, objHandRight)){
-        if (!(*objHandRight)->TryGetObjectField(fieldRotations, rotHandRight))
-            rotHandRight = nullptr;
-        if (!(*objHandRight)->TryGetObjectField(fieldVectors, vecHandRight))
-            vecHandRight = nullptr;
-    } else {
-        objHandRight = nullptr;
-        rotHandRight = nullptr;
-        vecHandRight = nullptr;
-    }
-
-    visibilityFlags.ProcessUpdate(scaBody);
-    liveValues.ProcessUpdateScalarsBody(scaBody);
-    liveValues.ProcessUpdateVectorsBody(vecBody);
-    liveValues.ProcessUpdateVectorsHandLeft(vecHandLeft);
-    liveValues.ProcessUpdateVectorsHandRight(vecHandRight);
-
-    
-	data.WorldTime = FPlatformTime::Seconds();
-
-	if (rotBody == nullptr && cachedPose.Num() < 1) {
+	double timestamp;
+	jsonObject->TryGetNumberField("Timestamp", timestamp);
+	// drop packets which are older than latest.  in case clock changes capping staleness test at 600 seconds. 
+	if (liveValues.timestamp - 600.0 < timestamp && timestamp < liveValues.timestamp) {
 		return false;
+	}
+	liveValues.timestamp = timestamp;
 
-	} else if (rotBody == nullptr) {
+	FString rigStringOut;
+	if (jsonObject->TryGetStringField(fieldRigType, rigStringOut) && FName(rigStringOut) != rigType)
+		UE_LOG(LogTemp, Warning, TEXT("PoseAI LiveLink: Rig is streaming in %s format, expected %s format."), *rigStringOut, *rigType.ToString());
+
+	uint32 packetFormat = 0;
+	jsonObject->TryGetNumberField("PF", packetFormat);
+
+	if (packetFormat == 1)
+		ProcessCompactSupplementaryData(jsonObject, data);
+	else
+		ProcessVerboseSupplementaryData(jsonObject, data);
+
+	if (visibilityFlags.isTorso && liveValues.bodyHeight > 0.0f)
+		liveValues.rootTranslation = FVector(
+			liveValues.hipScreen[0] * rigHeight / liveValues.bodyHeight,
+			0.0, //currently no body distance estimate from pose camera
+			liveValues.jumpHeight * rigHeight
+		);
+
+	TriggerEvents();
+
+	data.WorldTime = FPlatformTime::Seconds();
+	bool has_processed = (packetFormat == 1) ? ProcessCompactRotations(jsonObject, data) : ProcessVerboseRotations(jsonObject, data);
+	return has_processed;
+}
+
+void PoseAIRig::TriggerEvents() {
+	/* trigger various events and update the Pose AI Movement Component */
+	if (visibilityFlags.HasChanged()) {
+		UPoseAIEventDispatcher::GetDispatcher()->BroadcastVisibilityChange(name, visibilityFlags);
+	}
+	if (verbose.Events.Jump.CheckTriggerAndUpdate()) {
+		UPoseAIEventDispatcher::GetDispatcher()->BroadcastJumps(name);
+	}
+	if (verbose.Events.Footstep.CheckTriggerAndUpdate()) {
+		float height = std::abs(verbose.Events.Footstep.Magnitude);
+		UPoseAIEventDispatcher::GetDispatcher()->BroadcastFootsteps(name, height, verbose.Events.Footstep.Magnitude > 0.0f);
+	}
+	if (verbose.Events.FeetSplit.CheckTriggerAndUpdate()) {
+		float width = std::abs(verbose.Events.FeetSplit.Magnitude);
+		UPoseAIEventDispatcher::GetDispatcher()->BroadcastFeetsplits(name, width, verbose.Events.FeetSplit.Magnitude < 0.0f);
+	}
+	if (verbose.Events.ArmPump.CheckTriggerAndUpdate()) {
+		float height = std::abs(verbose.Events.ArmPump.Magnitude);
+		UPoseAIEventDispatcher::GetDispatcher()->BroadcastArmpumps(name, height);
+	}
+	if (verbose.Events.ArmFlex.CheckTriggerAndUpdate()) {
+		float width = std::abs(verbose.Events.ArmFlex.Magnitude);
+		UPoseAIEventDispatcher::GetDispatcher()->BroadcastArmflexes(name, width, verbose.Events.ArmFlex.Magnitude < 0.0f);
+	}
+	if (verbose.Events.SidestepL.CheckTriggerAndUpdate()) {
+		UPoseAIEventDispatcher::GetDispatcher()->BroadcastSidestepL(name, verbose.Events.SidestepL.Magnitude < 0.0f);
+	}
+	if (verbose.Events.SidestepR.CheckTriggerAndUpdate()) {
+		UPoseAIEventDispatcher::GetDispatcher()->BroadcastSidestepR(name, verbose.Events.SidestepR.Magnitude < 0.0f);
+	}
+	if (verbose.Events.ArmGestureL.CheckTriggerAndUpdate()) {
+		if (verbose.Events.ArmGestureL.Current == 50)
+			UPoseAIEventDispatcher::GetDispatcher()->BroadcastArmjacks(name, true);
+		else if (verbose.Events.ArmGestureL.Current == 51)
+			UPoseAIEventDispatcher::GetDispatcher()->BroadcastArmjacks(name, false);
+		else
+			UPoseAIEventDispatcher::GetDispatcher()->BroadcastArmGestureL(name, verbose.Events.ArmGestureL.Current);
+	}
+	if (verbose.Events.ArmGestureR.CheckTriggerAndUpdate()) {
+		if (verbose.Events.ArmGestureR.Current < 50)
+			UPoseAIEventDispatcher::GetDispatcher()->BroadcastArmGestureR(name, verbose.Events.ArmGestureR.Current);
+	}
+	if (isDifferentAndSet(liveValues.handZoneLeft, handZoneL)) {
+		UPoseAIEventDispatcher::GetDispatcher()->BroadcastHandToZoneL(name, handZoneL);
+	}
+	if (isDifferentAndSet(liveValues.handZoneRight, handZoneR)) {
+		UPoseAIEventDispatcher::GetDispatcher()->BroadcastHandToZoneR(name, handZoneR);
+	}
+	if (isDifferentAndSet(liveValues.stableFeet, stableFeet)) {
+		if (stableFeet > 1)
+			UPoseAIEventDispatcher::GetDispatcher()->BroadcastStationary(name);
+	}
+	if (liveValues.isCrouching != isCrouching) {
+		isCrouching = !isCrouching;
+		UPoseAIEventDispatcher::GetDispatcher()->BroadcastCrouches(name, isCrouching);
+	}
+	if (visibilityFlags.isTorso)
+		UPoseAIEventDispatcher::GetDispatcher()->BroadcastLiveValues(name, liveValues);
+}
+
+
+void PoseAIRig::ProcessCompactSupplementaryData(const TSharedPtr<FJsonObject> jsonObject, FLiveLinkAnimationFrameData& data)
+{
+	TSharedPtr < FJsonObject > objBody;
+	TSharedPtr < FJsonObject > objHandLeft;
+	TSharedPtr < FJsonObject > objHandRight;
+
+	jsonObject->TryGetNumberField("ModelLatency", liveValues.modelLatency);
+	
+	objBody = (jsonObject->HasTypedField<EJson::Object>(fieldBody)) ? jsonObject->GetObjectField(fieldBody) : nullptr;
+	if (objBody != nullptr && objBody.IsValid()) {
+		FString VisA = (objBody->HasTypedField<EJson::String>("VisA")) ? objBody->GetStringField("VisA") : "";
+		FString ScaA = (objBody->HasTypedField<EJson::String>("ScaA")) ? objBody->GetStringField("ScaA") : "";
+		FString VecA = (objBody->HasTypedField<EJson::String>("VecA")) ? objBody->GetStringField("VecA") : "";
+		FString EveA = (objBody->HasTypedField<EJson::String>("EveA")) ? objBody->GetStringField("EveA") : "";
+		visibilityFlags.ProcessCompact(VisA);
+		liveValues.ProcessCompactScalarsBody(ScaA);
+		liveValues.ProcessCompactVectorsBody(VecA);
+		verbose.Events.ProcessCompactBody(EveA);
+		liveValues.jumpHeight = verbose.Events.Jump.Magnitude;
+
+	}
+	objHandLeft = (jsonObject->HasTypedField<EJson::Object>(fieldHandLeft)) ? jsonObject->GetObjectField(fieldHandLeft) : nullptr;
+	if (objHandLeft != nullptr && objHandLeft.IsValid()) {
+		FString VecA = (objHandLeft->HasTypedField<EJson::String>("VecA")) ? objHandLeft->GetStringField("VecA") : "";
+		liveValues.ProcessCompactVectorsHandLeft(VecA);
+	}
+
+	objHandRight = (jsonObject->HasTypedField<EJson::Object>(fieldHandRight)) ? jsonObject->GetObjectField(fieldHandRight) : nullptr;
+	if (objHandRight != nullptr && objHandRight.IsValid()) {
+		FString VecA = (objHandRight->HasTypedField<EJson::String>("VecA")) ? objHandRight->GetStringField("VecA") : "";
+		liveValues.ProcessCompactVectorsHandRight(VecA);
+	}
+}
+
+void PoseAIRig::AssignCharacterMotion(FLiveLinkAnimationFrameData& data) {
+
+	// to ensure grounding in the capsule, calculates lowest Z in component space.  doesn't check fingers to save calculations on fingers: if this is important consider using parents.Num()
+	TArray<FTransform> componentTransform;
+	componentTransform.Emplace(data.Transforms[0]);
+	componentTransform.Emplace(data.Transforms[1]);
+	float minZ = 0.0f;
+	for (int32 j = 2; j < numBodyJoints; j++) {
+		componentTransform.Emplace(data.Transforms[j] * componentTransform[parentIndices[j]]);
+		minZ = FGenericPlatformMath::Min(minZ, componentTransform[j].GetTranslation().Z);
+	}
+	minZ -= rootHipOffsetZ;
+
+	FVector baseTranslation;
+	if (isDesktop)
+		baseTranslation = FVector(0.0f, 0.0f, rigHeight * 0.5f);
+	else
+		baseTranslation = liveValues.rootTranslation; //careful as this assumes liveValues has been updated already this frame
+
+	// assigns motion either to root or to hips
+	if (useRootMotion) {
+		//hip to low point Z distance assigned to hips, rest of movement assigned to root
+		data.Transforms[1].SetTranslation(FVector(0.0f, 0.0f, -minZ));
+		data.Transforms[0].SetTranslation(baseTranslation);
+	}
+	else {
+		baseTranslation.Z -= minZ;
+		data.Transforms[1].SetTranslation(baseTranslation);
+	}
+}
+
+bool PoseAIRig::ProcessCompactRotations(const TSharedPtr<FJsonObject> jsonObject, FLiveLinkAnimationFrameData& data)
+{
+	TSharedPtr < FJsonObject > objBody;
+	TSharedPtr < FJsonObject > objHandLeft;
+	TSharedPtr < FJsonObject > objHandRight;
+	FString rotaBody;
+	FString rotaHandLeft;
+	FString rotaHandRight;
+
+	objBody = (jsonObject->HasTypedField<EJson::Object>(fieldBody)) ? jsonObject->GetObjectField(fieldBody) : nullptr;
+	if (objBody != nullptr && objBody.IsValid())
+		rotaBody = (objBody->HasTypedField<EJson::String>("RotA")) ? objBody->GetStringField("RotA") : "";
+
+	objHandLeft = (jsonObject->HasTypedField<EJson::Object>(fieldHandLeft)) ? jsonObject->GetObjectField(fieldHandLeft) : nullptr;
+	if (objHandLeft != nullptr && objHandLeft.IsValid())
+		rotaHandLeft = (objHandLeft->HasTypedField<EJson::String>("RotA")) ? objHandLeft->GetStringField("RotA") : "";
+
+	objHandRight = (jsonObject->HasTypedField<EJson::Object>(fieldHandRight)) ? jsonObject->GetObjectField(fieldHandRight) : nullptr;
+	if (objHandRight != nullptr && objHandRight.IsValid())
+		rotaHandRight = (objHandRight->HasTypedField<EJson::String>("RotA")) ? objHandRight->GetStringField("RotA") : "";
+
+
+	bool hasProcessedRotations;
+
+	if ((rotaBody.Len() < 8 && cachedPose.Num() < 1) ) {//|| !visibilityFlags.isTorso
+		hasProcessedRotations = false;
+	}
+	else if (rotaBody.Len() < 8 ) {
 		data.Transforms.Append(cachedPose);
-		return true;
-
-	} else {
-
-		
-		FString rigStringOut;
-		if(jsonObject->TryGetStringField(fieldRigType, rigStringOut)){
-			if (FName(rigStringOut) != rigType) 
-				UE_LOG(LogTemp, Warning, TEXT("PoseAI LiveLink: Rig is streaming in %s format, expected %s format."), *rigStringOut, *rigType.ToString());
-		} else {
-			UE_LOG(LogTemp, Warning, TEXT("PoseAI LiveLink: Can't get rig field."));
-		}
-
-		const TArray < TSharedPtr < FJsonValue > >* hipScreen;
-		double bodyHeight;
-		FVector baseTranslation = FVector::ZeroVector;
-		if (isDesktop) {
-			baseTranslation = FVector(0.0f, 0.0f, rigHeight * 0.5f);
-		}
-		else if (vecBody != nullptr && (*vecBody)->TryGetArrayField(fieldHipScreen, hipScreen) &&
-			scaBody != nullptr && (*scaBody)->TryGetNumberField(fieldBodyHeight, bodyHeight) &&
-			(bodyHeight > 0.1f)) {
-				baseTranslation = FVector(
-					-(*hipScreen)[0]->AsNumber() * rigHeight / bodyHeight , //* (isMirrored ? -1.0f : 1.0f)
-					0.0,
-					-(*hipScreen)[1]->AsNumber() * rigHeight / bodyHeight
-				);
-		}
-
-		
+		hasProcessedRotations = true;
+	}
+	else {
 		TArray<FQuat> componentRotations;
+		AppendCachedRotations(0, 1, componentRotations, data);
+
+		if (rotaBody.Len() > 7) {
+			TArray<float> flatArray;
+			TArray<FQuat> quatArray;
+			FStringFixed12ToFloat(rotaBody, flatArray);
+			FlatArrayToQuats(flatArray, quatArray);
+			if (isDesktop) {
+				const FQuat identity = FQuat::Identity;
+				quatArray.InsertDefaulted(1, lowerBodyNumOfJoints);
+			}
+			AppendQuatArray(quatArray, 1, componentRotations, data); //start at 1 as psoe camera does not include the root joint
+		}
+		else
+			AppendCachedRotations(1, numBodyJoints, componentRotations, data);
 		
+
+		if (rotaHandLeft.Len() > 7) {
+			TArray<float> flatArray;
+			TArray<FQuat> quatArray;
+			FStringFixed12ToFloat(rotaHandLeft, flatArray);
+			FlatArrayToQuats(flatArray, quatArray);
+			AppendQuatArray(quatArray, numBodyJoints, componentRotations, data);
+		}
+		else
+			AppendCachedRotations(numBodyJoints, numBodyJoints + numHandJoints, componentRotations, data);
+		if (rotaHandRight.Len() > 7) {
+			TArray<float> flatArray;
+			TArray<FQuat> quatArray;
+			FStringFixed12ToFloat(rotaHandRight, flatArray);
+			FlatArrayToQuats(flatArray, quatArray);
+			AppendQuatArray(quatArray, numBodyJoints + numHandJoints, componentRotations, data);
+		}
+		else
+			AppendCachedRotations(numBodyJoints + numHandJoints, numBodyJoints + 2 * numHandJoints, componentRotations, data);
+		AssignCharacterMotion(data);
+		CachePose(data.Transforms);
+		hasProcessedRotations = true;
+	}
+	return hasProcessedRotations;
+}
+
+bool PoseAIRig::ProcessVerboseRotations(const TSharedPtr<FJsonObject> jsonObject, FLiveLinkAnimationFrameData& data)
+{
+	TSharedPtr < FJsonObject > objBody;
+	TSharedPtr < FJsonObject > objHandLeft;
+	TSharedPtr < FJsonObject > objHandRight;
+	TSharedPtr < FJsonObject > rotBody = nullptr;
+	TSharedPtr < FJsonObject > rotHandLeft = nullptr;
+	TSharedPtr < FJsonObject > rotHandRight = nullptr;
+
+	objBody = (jsonObject->HasTypedField<EJson::Object>(fieldBody)) ? jsonObject->GetObjectField(fieldBody) : nullptr;
+	if (objBody != nullptr && objBody.IsValid())
+		rotBody = (objBody->HasTypedField<EJson::Object>(fieldRotations)) ? objBody->GetObjectField(fieldRotations) : nullptr;
+
+	objHandLeft = (jsonObject->HasTypedField<EJson::Object>(fieldHandLeft)) ? jsonObject->GetObjectField(fieldHandLeft) : nullptr;
+	if (objHandLeft != nullptr && objHandLeft.IsValid())
+		rotHandLeft = (objHandLeft->HasTypedField<EJson::Object>(fieldRotations)) ? objHandLeft->GetObjectField(fieldRotations) : nullptr;
+
+	objHandRight = (jsonObject->HasTypedField<EJson::Object>(fieldHandRight)) ? jsonObject->GetObjectField(fieldHandRight) : nullptr;
+	if (objHandRight != nullptr && objHandRight.IsValid())
+		rotHandRight = (objHandRight->HasTypedField<EJson::Object>(fieldRotations)) ? objHandRight->GetObjectField(fieldRotations) : nullptr;
+
+
+	bool hasProcessedRotations;
+	if (rotBody == nullptr && cachedPose.Num() < 1) {
+		hasProcessedRotations = false;
+	}
+	else if (rotBody == nullptr || !visibilityFlags.isTorso) {
+		data.Transforms.Append(cachedPose);
+		hasProcessedRotations = true;
+	}
+	else {
+		TArray<FQuat> componentRotations;
+
 		for (int32 i = 0; i < jointNames.Num(); i++) {
 			const FName& jointName = jointNames[i];
 			int32 parentIdx = parentIndices[i];
@@ -171,13 +348,15 @@ bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLink
 			FQuat rotation;
 			const TArray < TSharedPtr < FJsonValue > >* outArray;
 			FString jointString = jointName.ToString();
-			if ((rotBody != nullptr && (*rotBody)->TryGetArrayField(jointString, outArray)) ||
-				(rotHandLeft != nullptr && (*rotHandLeft)->TryGetArrayField(jointString, outArray)) ||
-				(rotHandRight != nullptr && (*rotHandRight)->TryGetArrayField(jointString, outArray))) {
+			if ((rotBody != nullptr && rotBody->TryGetArrayField(jointString, outArray)) ||
+				(rotHandLeft != nullptr && rotHandLeft->TryGetArrayField(jointString, outArray)) ||
+				(rotHandRight != nullptr && rotHandRight->TryGetArrayField(jointString, outArray))) {
 				rotation = FQuat((*outArray)[0]->AsNumber(), (*outArray)[1]->AsNumber(), (*outArray)[2]->AsNumber(), (*outArray)[3]->AsNumber());
-			} else if (cachedPose.Num() > i) {
+			}
+			else if (cachedPose.Num() > i) {
 				rotation = parentQuat * cachedPose[i].GetRotation();
-			} else {
+			}
+			else {
 				rotation = FQuat::Identity;
 			}
 			componentRotations.Add(rotation);
@@ -187,57 +366,79 @@ bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLink
 			//Live link expects local rotations.  Consider having this sent directly by PoseAI app to save calculations
 			data.Transforms.Add(transform);
 		}
-		
-		
-		if (scaBody != nullptr) {
-			double leftShrug = 0.0;
-			double rightShrug = 0.0;
-			(*scaBody)->TryGetNumberField(fieldShrugLeft, leftShrug);
-			data.Transforms[leftShoulderJoint].AddToTranslation(leftShrug * shrugVector);
-			(*scaBody)->TryGetNumberField(fieldShrugRight, rightShrug);
-			data.Transforms[rightShoulderJoint].AddToTranslation(rightShrug * shrugVector);
-		}
 
-
-		// ***************************** calculates and assigns character motion **************************************************
-		
-		// to ensure grounding in the capsule, calculates lowest Z in component space.  doesn't check fingers to save calculations on fingers: if this is important consider using parents.Num()
-		TArray<FTransform> componentTransform;
-		componentTransform.Emplace(data.Transforms[0]);
-		componentTransform.Emplace(data.Transforms[1]);
-		float minZ = 0.0f;
-		for (int32 j = 2; j < numBodyJoints ; j++) {
-			componentTransform.Emplace(data.Transforms[j] * componentTransform[parentIndices[j]]);
-			minZ = FGenericPlatformMath::Min(minZ, componentTransform[j].GetTranslation().Z);
-		}
-		
-		//update adjustment only when stable.  this allows character to jump
-		double stableFoot = 0.0f;
-		if (scaBody != nullptr &&
-			(*scaBody)->TryGetNumberField(fieldStableFoot, stableFoot) &&
-			(stableFoot > 0.5f)) {
-			verticalAdjustment = -minZ - baseTranslation.Z;
-			verticalAdjustment = FGenericPlatformMath::Min(verticalAdjustment, rigHeight); // a safety clamp.
-		}
-
-		// assigns motion either to root or to hips
-		if (useRootMotion) {
-			//hip to low point Z distance assigned to hips, rest of movement assigned to root
-			data.Transforms[1].SetTranslation(FVector(0.0f, 0.0f, -minZ));
-			baseTranslation.Z = FGenericPlatformMath::Min(
-				FGenericPlatformMath::Max(baseTranslation.Z + verticalAdjustment + minZ, 0.0f),
-				rigHeight*0.5f // a safety min
-			); 
-			data.Transforms[0].SetTranslation(baseTranslation);
-		} else {
-			baseTranslation.Z = FGenericPlatformMath::Min(
-				FGenericPlatformMath::Max(baseTranslation.Z + verticalAdjustment, -minZ),
-				rigHeight * 0.5f - minZ // a safety min
-			);
-			data.Transforms[1].SetTranslation(baseTranslation);
-		}
+		AssignCharacterMotion(data);
 		CachePose(data.Transforms);
-		return true;
+
+		hasProcessedRotations = true;
+	}
+	return hasProcessedRotations;
+}
+
+void PoseAIRig::ProcessVerboseSupplementaryData(const TSharedPtr<FJsonObject> jsonObject, FLiveLinkAnimationFrameData& data)
+{
+	TSharedPtr < FJsonObject > objBody;
+	TSharedPtr < FJsonObject > objHandLeft;
+	TSharedPtr < FJsonObject > objHandRight;
+	TSharedPtr < FJsonObject > scaBody = nullptr;
+	TSharedPtr < FJsonObject > eveBody = nullptr;
+	TSharedPtr < FJsonObject > vecBody = nullptr;
+	TSharedPtr < FJsonObject > vecHandLeft = nullptr;
+	TSharedPtr < FJsonObject > vecHandRight = nullptr;
+
+	jsonObject->TryGetNumberField("ModelLatency", liveValues.modelLatency);
+
+	objBody = (jsonObject->HasTypedField<EJson::Object>(fieldBody)) ? jsonObject->GetObjectField(fieldBody) : nullptr;
+	objHandLeft = (jsonObject->HasTypedField<EJson::Object>(fieldHandLeft)) ? jsonObject->GetObjectField(fieldHandLeft) : nullptr;
+	objHandRight = (jsonObject->HasTypedField<EJson::Object>(fieldHandRight)) ? jsonObject->GetObjectField(fieldHandRight) : nullptr;
+
+	if (objBody != nullptr && objBody.IsValid()) {
+		verbose.ProcessJsonObject(objBody);
+		//vecBody = (objBody->HasTypedField<EJson::Object>(fieldVectors)) ? objBody->GetObjectField(fieldVectors) : nullptr;
+	}
+
+	if (objHandLeft != nullptr && objHandLeft.IsValid()) {
+		vecHandLeft = (objHandLeft->HasTypedField<EJson::Object>(fieldVectors)) ? objHandLeft->GetObjectField(fieldVectors) : nullptr;
+
+	}
+	if (objHandRight != nullptr && objHandRight.IsValid()) {
+		vecHandRight = (objHandRight->HasTypedField<EJson::Object>(fieldVectors)) ? objHandRight->GetObjectField(fieldVectors) : nullptr;
+	}
+
+	liveValues.ProcessVerboseBody(verbose);
+	liveValues.ProcessVerboseVectorsHandLeft(vecHandLeft);
+	liveValues.ProcesssVerboseVectorsHandRight(vecHandRight);
+	liveValues.jumpHeight = verbose.Events.Jump.Magnitude;
+	visibilityFlags.ProcessVerbose(verbose.Scalars);
+}
+
+void PoseAIRig::AppendQuatArray(const TArray<FQuat>& quatArray, int32 begin, TArray<FQuat>& componentRotations, FLiveLinkAnimationFrameData& data) {
+	for (int32 i = begin; i < begin + quatArray.Num(); i++) {
+		const FName& jointName = jointNames[i];
+		int32 parentIdx = parentIndices[i];
+		const FQuat& rotation = quatArray[i - begin];
+		FQuat parentQuat = (parentIdx < 0 ? FQuat::Identity : componentRotations[parentIdx]);
+		const FVector& translation = boneVectors.FindRef(jointName);
+		componentRotations.Add(rotation);
+		FQuat finalRotation = parentQuat.Inverse() * rotation;
+		finalRotation.Normalize();
+		FTransform transform = FTransform(finalRotation, translation, FVector::OneVector);
+		data.Transforms.Add(transform);
+	}
+}
+
+void PoseAIRig::AppendCachedRotations(int32 begin, int32 end, TArray<FQuat>& componentRotations, FLiveLinkAnimationFrameData& data) {
+	for (int32 i = begin; i < end; i++) {
+		const FName& jointName = jointNames[i];
+		int32 parentIdx = parentIndices[i];
+		FQuat parentQuat = (parentIdx < 0 ? FQuat::Identity : componentRotations[parentIdx]);
+		const FQuat& rotation =  (cachedPose.Num() > i) ? parentQuat * cachedPose[i].GetRotation() : FQuat::Identity;
+		const FVector& translation = boneVectors.FindRef(jointName);
+		componentRotations.Add(rotation);
+		FQuat finalRotation = parentQuat.Inverse() * rotation;
+		finalRotation.Normalize();
+		FTransform transform = FTransform(finalRotation, translation, FVector::OneVector);
+		data.Transforms.Add(transform);
 	}
 }
 
@@ -282,12 +483,8 @@ void PoseAIRigUE4::Configure()
 	AddBoneToLast(TEXT("lowerarm_r"), FVector(-30.33993, 0, 0));
 	numBodyJoints = jointNames.Num();
 	if (includeHands) {
-		numBodyJoints += 2;
 		AddBone(TEXT("hand_l"), TEXT("lowerarm_l"), FVector(26.975143, 0, 0));
-		AddBone(TEXT("hand_r"), TEXT("lowerarm_r"), FVector(-26.975143, 0, 0));
 		AddBone(TEXT("lowerarm_twist_01_l"), TEXT("lowerarm_l"), FVector(14.0, 0, 0));
-		AddBone(TEXT("lowerarm_twist_01_r"), TEXT("lowerarm_r"), FVector(-14.0, 0, 0));
-
 		AddBone(TEXT("index_01_l"), TEXT("hand_l"), FVector(12.068114, -1.763462, -2.109398));
 		AddBoneToLast(TEXT("index_02_l"), FVector(4.287498, 0, 0));
 		AddBoneToLast(TEXT("index_03_l"), FVector(3.39379, 0, 0));
@@ -304,6 +501,8 @@ void PoseAIRigUE4::Configure()
 		AddBoneToLast(TEXT("thumb_02_l"), FVector(3.869672, 0, 0));
 		AddBoneToLast(TEXT("thumb_03_l"), FVector(4.062171, 0, 0));
 		
+		AddBone(TEXT("hand_r"), TEXT("lowerarm_r"), FVector(-26.975143, 0, 0));
+		AddBone(TEXT("lowerarm_twist_01_r"), TEXT("lowerarm_r"), FVector(-14.0, 0, 0));
 		AddBone(TEXT("index_01_r"), TEXT("hand_r"), FVector(-12.068114, 1.763462, 2.109398));
 		AddBoneToLast(TEXT("index_02_r"), FVector(-4.287498, 0, 0));
 		AddBoneToLast(TEXT("index_03_r"), FVector(-3.39379, 0, 0));
@@ -320,10 +519,9 @@ void PoseAIRigUE4::Configure()
 		AddBoneToLast(TEXT("thumb_02_r"), FVector(-3.869672, 0, 0));
 		AddBoneToLast(TEXT("thumb_03_r"), FVector(-4.062171, 0, 0));
 	}
+	numHandJoints = (jointNames.Num() - numBodyJoints) / 2;
 
 	rigHeight = 170.0f;
-	shrugVector = FVector(rigHeight * 0.03f, 0.0f, 0.0f);
-
 	rig = MakeStaticData();
 }
 
@@ -362,12 +560,9 @@ void PoseAIRigMixamo::Configure()
 
 	numBodyJoints = jointNames.Num();
 	if (includeHands) {
-		numBodyJoints += 2;
 		AddBone(TEXT("LeftHand"), TEXT("LeftForeArm"), FVector(0, -23.0, 0));
-		AddBone(TEXT("RightHand"), TEXT("RightForeArm"), FVector(0, -23.0, 0));
 		AddBone(TEXT("LeftForeArmTwist"), TEXT("LeftForeArm"), FVector(0, -14.0, 0));
-		AddBone(TEXT("RightForeArmTwist"), TEXT("RightForeArm"), FVector(0, -14.0, 0));
-
+		
 		AddBone(TEXT("LeftHandIndex1"), TEXT("LeftHand"), FVector(-3.3, -8.3, 0.1));
 		AddBoneToLast(TEXT("LeftHandIndex2"), FVector(0, -3.1, 0));
 		AddBoneToLast(TEXT("LeftHandIndex3"), FVector(0, -2.9, 0));
@@ -384,6 +579,8 @@ void PoseAIRigMixamo::Configure()
 		AddBoneToLast(TEXT("LeftHandThumb2"), FVector(-0.7, -3.2, 0));
 		AddBoneToLast(TEXT("LeftHandThumb3"), FVector(0.2, -3.0, 0));
 
+		AddBone(TEXT("RightHand"), TEXT("RightForeArm"), FVector(0, -23.0, 0));
+		AddBone(TEXT("RightForeArmTwist"), TEXT("RightForeArm"), FVector(0, -14.0, 0));
 		AddBone(TEXT("RightHandIndex1"), TEXT("RightHand"), FVector(3.3, -8.3, 0.1));
 		AddBoneToLast(TEXT("RightHandIndex2"), FVector(0, -3.1, 0));
 		AddBoneToLast(TEXT("RightHandIndex3"), FVector(0, -2.9, 0));
@@ -400,10 +597,8 @@ void PoseAIRigMixamo::Configure()
 		AddBoneToLast(TEXT("RightHandThumb2"), FVector(0.7, -3.2, 0));
 		AddBoneToLast(TEXT("RightHandThumb3"), FVector(-0.2, -3.0, 0));
 	}
-
+	numHandJoints = (jointNames.Num() - numBodyJoints) / 2;
 	rigHeight = 161.0f;
-	shrugVector = FVector(0.0f, -rigHeight * 0.03f, 0.0f);
-
 	rig = MakeStaticData();
 }
 
@@ -446,14 +641,10 @@ void PoseAIRigMetaHuman::Configure()
 
 	numBodyJoints = jointNames.Num();
 	if (includeHands) {
-		numBodyJoints += 2;
-		AddBone(TEXT("hand_l"), TEXT("lowerarm_l"), FVector(25.2, 0, 0));
-		AddBone(TEXT("hand_r"), TEXT("lowerarm_r"), FVector(-25.2, 0, 0));
+		AddBone(TEXT("hand_l"), TEXT("lowerarm_l"), FVector(25.2, 0, 0));		
 		AddBone(TEXT("lowerarm_twist_01_l"), TEXT("lowerarm_l"), FVector(14.0, 0, 0));
-		AddBone(TEXT("lowerarm_twist_01_r"), TEXT("lowerarm_r"), FVector(-14.0, 0, 0));
 		AddBone(TEXT("lowerarm_twist_02_l"), TEXT("lowerarm_l"), FVector(7.0, 0, 0));
-		AddBone(TEXT("lowerarm_twist_02_r"), TEXT("lowerarm_r"), FVector(-7.0, 0, 0));
-
+		
 		AddBone(TEXT("index_metacarpal_l"), TEXT("hand_l"), FVector(3.5, 0.4, -2.1));
 		AddBoneToLast(TEXT("index_01_l"), FVector(5.9, 0.1, 0.3));
 		AddBoneToLast(TEXT("index_02_l"), FVector(3.6, 0, 0));
@@ -474,6 +665,9 @@ void PoseAIRigMetaHuman::Configure()
 		AddBoneToLast(TEXT("thumb_02_l"), FVector(4.4, 0, 0));
 		AddBoneToLast(TEXT("thumb_03_l"), FVector(2.7, 0, 0));
 
+		AddBone(TEXT("hand_r"), TEXT("lowerarm_r"), FVector(-25.2, 0, 0));
+		AddBone(TEXT("lowerarm_twist_01_r"), TEXT("lowerarm_r"), FVector(-14.0, 0, 0));
+		AddBone(TEXT("lowerarm_twist_02_r"), TEXT("lowerarm_r"), FVector(-7.0, 0, 0));
 		AddBone(TEXT("index_metacarpal_r"), TEXT("hand_r"), FVector(-3.5, -0.4, 2.1));
 		AddBoneToLast(TEXT("index_01_r"), FVector(-5.9, 0.1, 0.3));
 		AddBoneToLast(TEXT("index_02_r"), FVector(-3.6, 0, 0));
@@ -493,14 +687,8 @@ void PoseAIRigMetaHuman::Configure()
 		AddBone(TEXT("thumb_01_r"), TEXT("hand_r"), FVector(-2.0, 1.0, 2.6));
 		AddBoneToLast(TEXT("thumb_02_r"), FVector(-4.4, 0, 0));
 		AddBoneToLast(TEXT("thumb_03_r"), FVector(-2.7, 0, 0));
-
 	}
-
+	numHandJoints = (jointNames.Num() - numBodyJoints) / 2;
 	rigHeight = 168.0f;
-	shrugVector = FVector(rigHeight * 0.02f, 0.0f, 0.0f);
-	//override these as Metahuman has extra three joints in torso.
-	leftShoulderJoint = 18;
-	rightShoulderJoint = 21;
-
 	rig = MakeStaticData();
 }

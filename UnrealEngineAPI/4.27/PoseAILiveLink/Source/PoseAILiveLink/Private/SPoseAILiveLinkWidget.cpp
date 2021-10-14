@@ -164,7 +164,7 @@ void SPoseAILiveLinkWidget::Construct(const FArguments& InArgs)
 					.OnTextCommitted(this, &SPoseAILiveLinkWidget::UpdateCameraFPS)
 				.Text(FText::FromString(FString::FromInt(cameraFPS)))
 				]
-				]
+			]
 			+ SVerticalBox::Slot().Padding(3, 3, 1, 3).VAlign(VAlign_Center).HAlign(HAlign_Right).AutoHeight()
 			[
 				SNew(SButton)
@@ -262,7 +262,7 @@ void SPoseAILiveLinkWidget::disableExistingSource()
 
 TSharedPtr<ILiveLinkSource> SPoseAILiveLinkWidget::CreateSource(const FString& connectionString)
 {
-	PoseAIHandshake handshake = PoseAIHandshake();
+	FPoseAIHandshake handshake = FPoseAIHandshake();
 	handshake.isMirrored = isMirrored;
 	handshake.rig = PoseAI_Rigs[rigIndex];
 	handshake.mode = PoseAI_Modes[modeIndex];
@@ -270,6 +270,7 @@ TSharedPtr<ILiveLinkSource> SPoseAILiveLinkWidget::CreateSource(const FString& c
 	handshake.cameraFPS = cameraFPS;
 	UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Set handshake to %s"), *(handshake.ToString()));
 	TSharedPtr<ILiveLinkSource> sharedPtr = MakeShared<PoseAILiveLinkSource>(portNumIPv4, portNumIPv6, handshake, useRootMotion);
+	StaticCastSharedPtr< PoseAILiveLinkSource>(sharedPtr)->BindServers();
 	source = sharedPtr;
 	return sharedPtr;
 }

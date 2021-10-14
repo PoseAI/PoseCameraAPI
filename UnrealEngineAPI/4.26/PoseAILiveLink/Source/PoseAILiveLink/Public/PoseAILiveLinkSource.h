@@ -17,10 +17,8 @@
 #include "Json.h"
 #include "PoseAIRig.h"
 #include "PoseAILiveLinkServer.h"
-#include "PoseAIHandshake.h"
-
+#include "PoseAIStructs.h"
 #include "PoseAIEventDispatcher.h"
-
 
 #define LOCTEXT_NAMESPACE "PoseAI"
 
@@ -31,7 +29,7 @@
 class POSEAILIVELINK_API PoseAILiveLinkSource : public ILiveLinkSource
 {
 public:
-	PoseAILiveLinkSource(int32 inIPv4port, int32 inIPv6port, const PoseAIHandshake& handshake, bool useRootMotion);
+	PoseAILiveLinkSource(int32 inIPv4port, int32 inIPv6port, const FPoseAIHandshake& handshake, bool useRootMotion);
 	
 	~PoseAILiveLinkSource ();
 
@@ -63,6 +61,7 @@ public:
 	void AddSubject(FName name);
 	void UpdatePose(FName& name, TSharedPtr<FJsonObject> jsonPose);
 	static bool IsValidPort(int32 port);
+	void BindServers();
     
     
 
@@ -75,8 +74,8 @@ private:
 	ILiveLinkClient* liveLinkClient = nullptr;
 	ILiveLinkClient* client = nullptr;
 	
-	const PoseAIHandshake handshake;
-
+	FPoseAIHandshake handshake;
+	UPoseAIEventDispatcher* dispatcher;
 	// stores user selection for how character motion is assigned
 	bool useRootMotion = true;
 
@@ -84,15 +83,15 @@ private:
 	mutable FText status;
     
 	/* create two different server objects if user wants both IPv4 and IPv6, as not all systems allow dual sockets*/
-	TSharedPtr<PoseAILiveLinkServer, ESPMode::ThreadSafe> udpServerIPv4 = nullptr;
-	TSharedPtr<PoseAILiveLinkServer, ESPMode::ThreadSafe> udpServerIPv6 = nullptr;
+	TSharedPtr<PoseAILiveLinkServer> udpServerIPv4;
+	TSharedPtr<PoseAILiveLinkServer> udpServerIPv6;
 	
 	TMap<FName, FLiveLinkSubjectKey> subjectKeys = {};
 	TMap<FName, TSharedPtr<PoseAIRig, ESPMode::ThreadSafe>> rigs = {};
 	TQueue<FName> newConnections = {};
 	FGuid sourceGuid;
 
-	TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> MakeRig();
+	TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> MakeRig(FName name);
     
     
 	

@@ -38,4 +38,3 @@ struct POSEAILIVELINK_API PoseAIHandshake
 	}
 
 };
-

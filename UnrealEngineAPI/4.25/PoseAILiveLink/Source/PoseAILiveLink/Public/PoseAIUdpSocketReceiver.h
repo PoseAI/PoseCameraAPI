@@ -15,6 +15,10 @@
 #include "PoseAIEndpoint.h"
 #include "IPAddress.h"
 
+
+
+
+
 /**
  * Temporary fix for concurrency crashes. This whole class will be redesigned.
  */
@@ -26,7 +30,7 @@ typedef TSharedPtr<FArrayReader, ESPMode::ThreadSafe> FArrayReaderPtr;
  * The first parameter is the received data.
  * The second parameter is sender's IP endpoint.
  */
-DECLARE_DELEGATE_TwoParams(FPoseAIOnSocketDataReceived, const FArrayReaderPtr&, const FPoseAIEndpoint&);  //Change delegate name and use our endpoint
+DECLARE_DELEGATE_TwoParams(FPoseAIOnSocketDataReceived, const FString&, const FPoseAIEndpoint&);  //Change delegate name and use our endpoint
 
 
 /**
@@ -45,7 +49,7 @@ public:
 	 * @param InWaitTime The amount of time to wait for the socket to be readable.
 	 * @param InThreadName The receiver thread name (for debugging).
 	 */
-	FPoseAIUdpSocketReceiver(FSocket* InSocket, const FTimespan& InWaitTime, const TCHAR* InThreadName)
+	FPoseAIUdpSocketReceiver(TSharedPtr<FSocket> InSocket, const FTimespan& InWaitTime, const TCHAR* InThreadName)
 		: Socket(InSocket)
 		, Stopping(false)
 		, Thread(nullptr)
@@ -114,7 +118,9 @@ public:
 	{
 		while (!Stopping)
 		{
+			isUpdating = true;
 			Update(WaitTime);
+			isUpdating = false;
 		}
 
 		return 0;
@@ -123,6 +129,8 @@ public:
 	virtual void Stop() override
 	{
 		Stopping = true;
+		while (isUpdating)
+		{}
 	}
 
 	virtual void Exit() override { }
@@ -136,27 +144,35 @@ protected:
 		{
 			return;
 		}
-
+		
 		/*************************************************
-			Hwere we make a change to specify address with protocol
+			Hwere we make changes to specify address with protocol
 			**********************************************************/
+		if (Stopping)
+			return;
+
 		TSharedRef<FInternetAddr> Sender = SocketSubsystem->CreateInternetAddr(Socket->GetProtocol());
 		uint32 Size;
-
-		while (Socket->HasPendingData(Size))
-		{
-			FArrayReaderPtr Reader = MakeShared<FArrayReader, ESPMode::ThreadSafe>(true);
+		
+		while (Socket!=nullptr && Socket.IsValid() && Socket->HasPendingData(Size))
+		{			
 			Reader->SetNumUninitialized(FMath::Min(Size, MaxReadBufferSize));
-
+			
 			int32 Read = 0;
-
 			if (Socket->RecvFrom(Reader->GetData(), Reader->Num(), Read, *Sender))
 			{
 				ensure((uint32)Read < MaxReadBufferSize);
 				Reader->RemoveAt(Read, Reader->Num() - Read, false);
-				DataReceivedDelegate.ExecuteIfBound(Reader, FPoseAIEndpoint(Sender));
+				// we also send the messages via delegate as FStrings instead of FArrayReaderPtrs
+				FString recvMessage;
+				char* bytedata = (char*)Reader->GetData();
+				bytedata[Reader->Num()] = '\0';
+				recvMessage = FString(UTF8_TO_TCHAR(bytedata));
+				DataReceivedDelegate.ExecuteIfBound(recvMessage, FPoseAIEndpoint(Sender));
 			}
 		}
+		
+		
 	}
 
 protected:
@@ -169,9 +185,9 @@ protected:
 	}
 
 private:
-
+	FArrayReaderPtr Reader = MakeShared<FArrayReader, ESPMode::ThreadSafe>(true);
 	/** The network socket. */
-	FSocket* Socket = nullptr;
+	TSharedPtr<FSocket> Socket = nullptr;
 
 	/** Pointer to the socket sub-system. */
 	ISocketSubsystem* SocketSubsystem = nullptr;
@@ -190,6 +206,8 @@ private:
 
 	/** The maximum read buffer size used to read the socket. */
 	uint32 MaxReadBufferSize = 65507u;
+
+	bool isUpdating = false;
 
 private:
 

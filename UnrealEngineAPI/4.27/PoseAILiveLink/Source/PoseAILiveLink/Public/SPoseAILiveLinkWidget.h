@@ -18,7 +18,7 @@
 #include "iLiveLinkSource.h"
 #include "LiveLinkSourceFactory.h"
 #include "IPAddress.h"
-#include "PoseAIHandshake.h"
+#include "PoseAIStructs.h"
 
 
 constexpr int32 POSEAI_DEFAULT_PORTNUM = 8080;

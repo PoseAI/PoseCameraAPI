@@ -35,6 +35,7 @@ public class PoseAILiveLink : ModuleRules
 				"LiveLink",
 				"LiveLinkInterface",
 				"Json",
+				"JsonUtilities",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);

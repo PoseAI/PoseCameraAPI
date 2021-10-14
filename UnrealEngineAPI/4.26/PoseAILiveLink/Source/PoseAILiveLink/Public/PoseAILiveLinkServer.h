@@ -12,37 +12,31 @@
 #include "Interfaces/IPv4/IPv4Endpoint.h"
 #include "IPAddress.h"
 #include "Json.h"
-#include "PoseAIHandshake.h"
+#include "PoseAIStructs.h"
 #include "PoseAIUdpSocketReceiver.h"
 #include "PoseAIEndpoint.h"
 
 #define LOCTEXT_NAMESPACE "PoseAI"
 
-DECLARE_DELEGATE_TwoParams(FPoseFrameDelegate, FName&, TSharedPtr<FJsonObject>);
-
 class PoseAILiveLinkRunnable;
 class FPoseAISocketSender;
-
+class PoseAILiveLinkSource;
 
 class POSEAILIVELINK_API PoseAILiveLinkServer
 {
 public:
-	void ReceiveUDPDelegate(const FArrayReaderPtr& arrayReaderPtr, const FPoseAIEndpoint& endpoint);
-	FSocket* GetSocket() const { return serverSocket; }
+	void ReceiveUDPDelegate(const FString& recvMessage, const FPoseAIEndpoint& endpoint);
+	TSharedPtr<FSocket> GetSocket() const { return serverSocket; }
 	
-	void CreateServer(int32 port, PoseAIHandshake myHandshake);
+	void CreateServer(int32 port, FPoseAIHandshake myHandshake, PoseAILiveLinkSource* mySource, TSharedRef< PoseAILiveLinkServer> serverRef);
 	
 	// receiver will be set on a runnable thread and set once started
-	void SetReceiver(TSharedPtr<FPoseAIUdpSocketReceiver, ESPMode::ThreadSafe> receiver) {
+	void SetReceiver(TSharedPtr<FPoseAIUdpSocketReceiver> receiver) {
 		udpSocketReceiver = receiver;
 	}
 
 	PoseAILiveLinkServer(bool isIPv6 = false) {
 		protocolType = (isIPv6) ? FNetworkProtocolTypes::IPv6 : FNetworkProtocolTypes::IPv4;
-	}
-
-	FPoseFrameDelegate& OnPoseReceived() {
-		return poseFrameDelegate;
 	}
 
 	~PoseAILiveLinkServer() {
@@ -54,39 +48,47 @@ public:
 	// utility function that identifies host IPv4 address, to be printed in LiveLink console to help user connect to correct address
 	bool GetIP(FString& myIP);
 	void Disconnect() const;
+	void SendConfig(FName target, FPoseAIModelConfig config);
+	void SetHandshake(const FPoseAIHandshake& handshake);
 
-	PoseAIHandshake handshake;
+	void SendHandshake(const FPoseAIEndpoint& endpoint) const;
+
+
 
 private:
 	const static FString fieldPrettyName;
 	const static FString fieldVersion;
+	const static FString fieldUUID;
 	const static FString requiredMinVersion;
-
+	PoseAILiveLinkSource* source_ = nullptr;
+	FPoseAIHandshake handshake;
 	FName protocolType;
 	int32 portNum;
-	FSocket* serverSocket = nullptr;
+	TSharedPtr<FSocket> serverSocket;
 
 	//used to launch receiver without slowing main thread
-	TSharedPtr<PoseAILiveLinkRunnable, ESPMode::ThreadSafe> poseAILiveLinkRunnable = nullptr;
+	TSharedPtr<PoseAILiveLinkRunnable, ESPMode::ThreadSafe> poseAILiveLinkRunnable;
 	//Listens for packets
-	TSharedPtr<FPoseAIUdpSocketReceiver, ESPMode::ThreadSafe> udpSocketReceiver = nullptr;
+	TSharedPtr<FPoseAIUdpSocketReceiver> udpSocketReceiver;
 	//sends instructions to paired app
-	TSharedPtr<FPoseAISocketSender, ESPMode::ThreadSafe> udpSocketSender = nullptr;
-	FPoseFrameDelegate poseFrameDelegate;
-	TMap<FString, FPoseAIEndpoint> knownSockets;
-	TMap<FString, FName> prettyNames;
+	TSharedPtr<FPoseAISocketSender> udpSocketSender;
+	TMap<FString, FPoseAIEndpoint> endpointFromSessionID;
+	TMap<FString, bool> hasRegistered;
+	TMap<FString, FName> fnameFromSessionID;
+	TMap<FName, FPoseAIEndpoint> endpointFromFName;
 	
 	bool cleaningUp = false;
 
 	// disconnect message formatted for Pose AI mobile app
 	FString disconnect = FString(TEXT("{\"REQUESTS\":[\"DISCONNECT\"]}"));
+	bool SendString(const FPoseAIEndpoint& endpoint, FString& message) const;
 
-	void SendHandshake(const FPoseAIEndpoint& endpoint) const;
 
-	bool ExtractPrettyName(TSharedPtr<FJsonObject> jsonObject, FName& prettyName) const;
+
+	FName ExtractPrettyName(TSharedPtr<FJsonObject> jsonObject, const FPoseAIEndpoint& endpoint) const;
 
 	// make sure mobile app is sufficiently advanced version as both endpoints of software evolve
-	bool CheckAppVersion(TSharedPtr<FJsonObject> jsonObject) const;
+	bool CheckAppVersion(FString version) const;
 
 	//split clean up routine by component
 	void CleanUpReceiver();
@@ -99,7 +101,7 @@ class POSEAILIVELINK_API PoseAILiveLinkRunnable : public FRunnable
 
 public:
 
-	PoseAILiveLinkRunnable(int32 port, PoseAILiveLinkServer* server) :
+	PoseAILiveLinkRunnable(int32 port, TSharedPtr<PoseAILiveLinkServer> server) :
 		port(port), poseAILiveLinkServer(server) {
 		myName = "PoseAILiveLinkServer_" + FGuid::NewGuid().ToString();
 		thread = FRunnableThread::Create(this, *myName, 0, EThreadPriority::TPri_Normal);
@@ -110,8 +112,8 @@ public:
 
 		FTimespan inWaitTime = FTimespan::FromMilliseconds(250);
 		FString receiverName = "PoseAILiveLink_Receiver_On_Port_" + FString::FromInt(port);
-		TSharedPtr<FPoseAIUdpSocketReceiver, ESPMode::ThreadSafe> udpSocketReceiver = MakeShared<FPoseAIUdpSocketReceiver, ESPMode::ThreadSafe>(poseAILiveLinkServer->GetSocket(), inWaitTime, * receiverName);
-		udpSocketReceiver->OnDataReceived().BindRaw(poseAILiveLinkServer, &PoseAILiveLinkServer::ReceiveUDPDelegate);
+		udpSocketReceiver = MakeShared<FPoseAIUdpSocketReceiver>(poseAILiveLinkServer->GetSocket(), inWaitTime, * receiverName);
+		udpSocketReceiver->OnDataReceived().BindSP(poseAILiveLinkServer.ToSharedRef(), &PoseAILiveLinkServer::ReceiveUDPDelegate);
 		udpSocketReceiver->Start();
 		poseAILiveLinkServer->SetReceiver(udpSocketReceiver);
 
@@ -126,11 +128,12 @@ protected:
 	int32 port;
 	FRunnableThread* thread = nullptr;
 private:
-	PoseAILiveLinkServer* poseAILiveLinkServer = nullptr;
+	TSharedPtr<PoseAILiveLinkServer> poseAILiveLinkServer;
+	TSharedPtr<FPoseAIUdpSocketReceiver> udpSocketReceiver;
 };
 
 
-// built in udpSocetSender kept crashing on cleanup so recreated one with sleep instead of tick/update 
+// built in udpSocketSender kept crashing on cleanup so recreated one with sleep instead of tick/update 
 class POSEAILIVELINK_API FPoseAISocketSender : public FRunnable
 {
 	// Structure for outbound packets.
@@ -153,32 +156,34 @@ class POSEAILIVELINK_API FPoseAISocketSender : public FRunnable
 	};
 public:
 
-	FPoseAISocketSender(FSocket* socket, const TCHAR* threadDescription) :
+	FPoseAISocketSender(TSharedPtr<FSocket> socket, const TCHAR* threadDescription) :
 		socket(socket) {
 		thread = FRunnableThread::Create(this, threadDescription, 0, EThreadPriority::TPri_Normal);
 	}
 
 	
-	bool ClearQueue() {
-		while (sendQueue.IsEmpty() == false) {
-			if (socket == nullptr) {
-				UE_LOG(LogTemp, Warning, TEXT("PoseAI LiveLink: socket missing from sender"));
-				return false;
-			}
-			
-			FPacket packet;
-			int32 sent = 0;
-			sendQueue.Dequeue(packet);
-			if (!socket->SendTo(packet.Data->GetData(), packet.Data->Num(), sent, *packet.Recipient.ToInternetAddr())) {
-				UE_LOG(LogTemp, Warning, TEXT("PoseAI LiveLink: unable to send to %s"), *(packet.Recipient.ToString()));			
-			}
+	void ClearQueue() {
+		{
+			FScopeLock Lock(&QcritSection);
+			while (!sendQueue.IsEmpty()) {
+				FPacket packet;
+				int32 sent = 0;
 
-			if (sent != packet.Data->Num())
-			{
-				return false;
+				if (socket == nullptr) {
+					UE_LOG(LogTemp, Warning, TEXT("PoseAI LiveLink: socket missing from sender"));
+					break;
+				}
+				sendQueue.Dequeue(packet);
+				if (!packet.Recipient.Address.IsValid())
+					continue;
+
+				if (!socket->SendTo(packet.Data->GetData(), packet.Data->Num(), sent, *packet.Recipient.ToInternetAddr()))
+					UE_LOG(LogTemp, Warning, TEXT("PoseAI LiveLink: unable to send to %s"), *(packet.Recipient.ToString()));
+
+				if (sent != packet.Data->Num())
+					break;
 			}
 		}
-		return true;
 	}
 
 	virtual uint32 Run() override {
@@ -187,32 +192,27 @@ public:
 		}
 
 		while (running ) {
-			if (!ClearQueue())
-				return false;
-			
-			if (running) {
-				Sleep(true);
-				while (running && sleeping) {
-					FPlatformProcess::Sleep(0.005);	
-				}
+			ClearQueue();
+			Sleep(true);
+			while (running && sleeping) {
+				FPlatformProcess::Sleep(0.005);	
 			}
+			
 		}
+		if (socket.IsValid())
+			socket->Close();
 		thread = nullptr;
 		return 0;
 	}
-
-	void StopThread(bool closeSocket) {
-		closeSocket_ = closeSocket;
-		running = false;
+	virtual void Exit() override {
 		ClearQueue();
+	}
+
+	virtual void Stop() override {
+		running = false;
 		if (thread != nullptr) {
 			Sleep(false);
 		}
-		if (closeSocket_) {
-			UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Closing socket"));
-			socket->Close();
-		}
-		socket = nullptr;
 	}
 
 	bool Send(const TSharedRef<TArray<uint8>, ESPMode::ThreadSafe>& Data, const FPoseAIEndpoint& Recipient)
@@ -233,10 +233,12 @@ public:
 
 protected:
 	/** The send queue. */
-	TQueue<FPacket, EQueueMode::Mpsc> sendQueue;
-
+	TQueue<FPacket, EQueueMode::Mpsc> sendQueue = {};
+	/* when the server is closed the main thread may also try to empty the queue (which can only have one consumer). This should guard against that*/
+	FCriticalSection QcritSection;
+	
 		/** The network socket. */
-	FSocket* socket;
+	TSharedPtr<FSocket> socket;
 	
 	/** The thread object. */
 	FRunnableThread* thread = nullptr;

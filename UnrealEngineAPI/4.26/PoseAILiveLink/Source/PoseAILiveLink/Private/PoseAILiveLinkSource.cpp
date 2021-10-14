@@ -3,41 +3,55 @@
 #include "PoseAILiveLinkSource.h"
 
 
-
 static int lockedAt;
 static int unlockedAt;
 static FCriticalSection critSection; 
 
 
-PoseAILiveLinkSource::PoseAILiveLinkSource(int32 inIPv4port, int32 inIPv6port, const PoseAIHandshake& handshake, bool useRootMotion) :
+PoseAILiveLinkSource::PoseAILiveLinkSource(int32 inIPv4port, int32 inIPv6port, const FPoseAIHandshake& handshake, bool useRootMotion) :
 	portIPv4(inIPv4port), portIPv6(inIPv6port), handshake(handshake), useRootMotion(useRootMotion), enabled(true), status(LOCTEXT("statusConnecting", "connecting"))
 {
-	if (inIPv6port > 0) {
-		UE_LOG(LogTemp, Display, TEXT("PoseAI: connecting to %d using IPv6"), inIPv6port);
+	dispatcher = UPoseAIEventDispatcher::GetDispatcher();
+	dispatcher->AddToRoot();
+}
 
-		usedPorts.Emplace(inIPv6port);
-		udpServerIPv6 = MakeShared<PoseAILiveLinkServer, ESPMode::ThreadSafe>(true);
-		udpServerIPv6->CreateServer(inIPv6port, handshake);
-		udpServerIPv6->OnPoseReceived().BindRaw(this, &PoseAILiveLinkSource::UpdatePose);
-		status = FText::FormatOrdered(LOCTEXT("statusConnected", "listening on IPv6 local-link Port:{1}"), FText::FromString(FString::FromInt(inIPv6port)));
-
+void PoseAILiveLinkSource::BindServers() {
+	if (portIPv6 > 0) {
+		UE_LOG(LogTemp, Display, TEXT("PoseAI: connecting to %d using IPv6"), portIPv6);
+		udpServerIPv6 = MakeShared<PoseAILiveLinkServer>(true);
+		if (udpServerIPv6.IsValid()) {
+			usedPorts.Emplace(portIPv6);
+			dispatcher->handshakeUpdate.AddSP(udpServerIPv6.ToSharedRef(), &PoseAILiveLinkServer::SetHandshake);
+			dispatcher->modelConfigUpdate.AddSP(udpServerIPv6.ToSharedRef(), &PoseAILiveLinkServer::SendConfig);
+			udpServerIPv6->CreateServer(portIPv6, handshake, this, udpServerIPv6.ToSharedRef());
+			status = FText::FormatOrdered(LOCTEXT("statusConnected", "listening on IPv6 local-link Port:{1}"), FText::FromString(FString::FromInt(portIPv6)));
+		}
+		else {
+			UE_LOG(LogTemp, Warning, TEXT("PoseAI: unable to create a server on %d using IPv4"), portIPv4);
+		}
 	}
 
-	if (inIPv4port > 0) {
-		UE_LOG(LogTemp, Display, TEXT("PoseAI: connecting to %d using IPv4"), inIPv4port);
-
-		usedPorts.Emplace(inIPv4port);
-		udpServerIPv4 = MakeShared<PoseAILiveLinkServer, ESPMode::ThreadSafe>(false);
-		udpServerIPv4->CreateServer(inIPv4port, handshake);
-		udpServerIPv4->OnPoseReceived().BindRaw(this, &PoseAILiveLinkSource::UpdatePose);
-		FString myIP;
-		udpServerIPv4->GetIP(myIP);
-		status = FText::FormatOrdered(LOCTEXT("statusConnected", "listening on {0} Port:{1}"), FText::FromString(myIP), FText::FromString(FString::FromInt(inIPv4port)));
+	if (portIPv4 > 0) {
+		UE_LOG(LogTemp, Display, TEXT("PoseAI: connecting to %d using IPv4"), portIPv4);		
+		udpServerIPv4 = MakeShared<PoseAILiveLinkServer>(false);
+		if (udpServerIPv4.IsValid()) {
+			usedPorts.Emplace(portIPv4);
+			dispatcher->handshakeUpdate.AddSP(udpServerIPv4.ToSharedRef(), &PoseAILiveLinkServer::SetHandshake);
+			dispatcher->modelConfigUpdate.AddSP(udpServerIPv4.ToSharedRef(), &PoseAILiveLinkServer::SendConfig);
+			udpServerIPv4->CreateServer(portIPv4, handshake, this, udpServerIPv4.ToSharedRef());
+			FString myIP;
+			udpServerIPv4->GetIP(myIP);
+			status = FText::FormatOrdered(LOCTEXT("statusConnected", "listening on {0} Port:{1}"), FText::FromString(myIP), FText::FromString(FString::FromInt(portIPv4)));
+		}
+		else {
+			UE_LOG(LogTemp, Warning, TEXT("PoseAI: unable to create a server on %d using IPv4"), portIPv4);
+		}
 	}
 }
 
-TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> PoseAILiveLinkSource::MakeRig() {
+TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> PoseAILiveLinkSource::MakeRig(FName name) {
 	return PoseAIRig::PoseAIRigFactory(
+		name,
 		FName(handshake.rig),
 		useRootMotion,
 		!handshake.mode.Contains(TEXT("BodyOnly")), //includeHands
@@ -58,16 +72,19 @@ void PoseAILiveLinkSource::AddSubject(FName name)
 	
 	critSection.Lock(); lockedAt = __LINE__;
 	liveLinkClient->RemoveSubject_AnyThread(subject.Key); // try to remove from client even if untracked here for case where preset loaded name
+	bool is_reconnection = false;
 	if (subjectKeys.Find(name) != 0) {
 		UE_LOG(LogTemp, Display, TEXT("PoseAILiveLink: replacing %s with new connection"), *(name.ToString()));
 		subjectKeys.Remove(name);
+		is_reconnection = true;
+
 	}
 	UE_LOG(LogTemp, Display, TEXT("PoseAIiveLink: adding %s to subjects"), *(name.ToString()));
 	if (!liveLinkClient->CreateSubject(subject)) {
 		UE_LOG(LogTemp, Warning, TEXT("PoseAILiveLink: unable to create subject %s"), *(name.ToString()));
 	}
 	else {
-		rigs.Add(name, MakeRig());
+		rigs.Add(name, MakeRig(name));
 		FLiveLinkStaticDataStruct rigDefinition = rigs[name]->MakeStaticData();
 		liveLinkClient->RemoveSubject_AnyThread(subject.Key);
 		liveLinkClient->PushSubjectStaticData_AnyThread(subject.Key, ULiveLinkAnimationRole::StaticClass(), MoveTemp(rigDefinition));
@@ -168,17 +185,17 @@ void PoseAILiveLinkSource::UpdatePose(FName& name, TSharedPtr<FJsonObject> jsonP
 		newConnections.Enqueue(name);
 		return;
 	}
-	TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> rig = *(rigs.Find(name));
-    if (rig == nullptr)
-        return;
+	TSharedPtr<PoseAIRig, ESPMode::ThreadSafe>* rig = rigs.Find(name);
+	if (rig == nullptr)
+		return;
+	if(!rig->IsValid()) {
+		rigs.Remove(name);
+		return;
+	}
 	FLiveLinkFrameDataStruct frameData(FLiveLinkAnimationFrameData::StaticStruct());
 	FLiveLinkAnimationFrameData& data = *frameData.Cast<FLiveLinkAnimationFrameData>();
 	data.Transforms.Reserve(100);
-	if (rig->ProcessFrame(jsonPose, data)) {
+	if ((*rig)->ProcessFrame(jsonPose, data)) {
 		liveLinkClient->PushSubjectFrameData_AnyThread(subjectKeys[name], MoveTemp(frameData));
 	}
-    if (rig->visibilityFlags.HasChanged()) {
-		UPoseAIEventDispatcher::GetDispatcher()->BroadcastVisibilityChange(name, rig->visibilityFlags);
-    }
-	UPoseAIEventDispatcher::GetDispatcher()->BroadcastLiveValues(name, rig->liveValues);
 }
