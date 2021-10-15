@@ -96,7 +96,7 @@ bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLink
 		liveValues.rootTranslation = FVector(
 			liveValues.hipScreen[0] * rigHeight / liveValues.bodyHeight,
 			0.0, //currently no body distance estimate from pose camera
-			liveValues.jumpHeight * rigHeight
+			0.0
 		);
 
 	TriggerEvents();
@@ -115,19 +115,19 @@ void PoseAIRig::TriggerEvents() {
 		UPoseAIEventDispatcher::GetDispatcher()->BroadcastJumps(name);
 	}
 	if (verbose.Events.Footstep.CheckTriggerAndUpdate()) {
-		float height = std::abs(verbose.Events.Footstep.Magnitude);
+		float height = FMath::Abs(verbose.Events.Footstep.Magnitude);
 		UPoseAIEventDispatcher::GetDispatcher()->BroadcastFootsteps(name, height, verbose.Events.Footstep.Magnitude > 0.0f);
 	}
 	if (verbose.Events.FeetSplit.CheckTriggerAndUpdate()) {
-		float width = std::abs(verbose.Events.FeetSplit.Magnitude);
+		float width = FMath::Abs(verbose.Events.FeetSplit.Magnitude);
 		UPoseAIEventDispatcher::GetDispatcher()->BroadcastFeetsplits(name, width, verbose.Events.FeetSplit.Magnitude < 0.0f);
 	}
 	if (verbose.Events.ArmPump.CheckTriggerAndUpdate()) {
-		float height = std::abs(verbose.Events.ArmPump.Magnitude);
+		float height = FMath::Abs(verbose.Events.ArmPump.Magnitude);
 		UPoseAIEventDispatcher::GetDispatcher()->BroadcastArmpumps(name, height);
 	}
 	if (verbose.Events.ArmFlex.CheckTriggerAndUpdate()) {
-		float width = std::abs(verbose.Events.ArmFlex.Magnitude);
+		float width = FMath::Abs(verbose.Events.ArmFlex.Magnitude);
 		UPoseAIEventDispatcher::GetDispatcher()->BroadcastArmflexes(name, width, verbose.Events.ArmFlex.Magnitude < 0.0f);
 	}
 	if (verbose.Events.SidestepL.CheckTriggerAndUpdate()) {
