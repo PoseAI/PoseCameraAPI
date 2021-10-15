@@ -78,16 +78,16 @@ UStepCounter* UStepCounter::SetProperties(float timeoutIn, float fadeDuration) {
 
 
 void UPoseAIMovementComponent::InitializeObjects() {
-     footsteps = NewObject<UStepCounter>(this);
-    leftsteps = NewObject<UStepCounter>(this)->SetProperties(0.3f, 0.1f);
-    rightsteps = NewObject<UStepCounter>(this)->SetProperties(0.3f, 0.1f);
-    feetsplits = NewObject<UStepCounter>(this);
-    armpumps = NewObject<UStepCounter>(this);
-    armflexes = NewObject<UStepCounter>(this);
-    armjacks = NewObject<UStepCounter>(this)->SetProperties(1.0f, 0.5f);
-    armflapL = NewObject<UStepCounter>(this)->SetProperties(0.5f, 1.5f);
-    armflapR = NewObject<UStepCounter>(this)->SetProperties(0.5f, 1.5f);
-    jumps = NewObject<UStepCounter>(this);
+     footsteps = NewObject<UStepCounter>();
+    leftsteps = NewObject<UStepCounter>()->SetProperties(0.3f, 0.1f);
+    rightsteps = NewObject<UStepCounter>()->SetProperties(0.3f, 0.1f);
+    feetsplits = NewObject<UStepCounter>();
+    armpumps = NewObject<UStepCounter>();
+    armflexes = NewObject<UStepCounter>();
+    armjacks = NewObject<UStepCounter>()->SetProperties(1.0f, 0.5f);
+    armflapL = NewObject<UStepCounter>()->SetProperties(0.5f, 1.5f);
+    armflapR = NewObject<UStepCounter>()->SetProperties(0.5f, 1.5f);
+    jumps = NewObject<UStepCounter>();
 }
 
 bool UPoseAIMovementComponent::RegisterAs(FName name, bool siezeIfTaken) {
@@ -165,12 +165,12 @@ void UPoseAIEventDispatcher::BroadcastSubjectConnected(FName rigName) {
         UPoseAIMovementComponent* existing_component;
         bool isReconnection = HasComponent(rigName, existing_component);
         if (isReconnection) {
-            if (existing_component != nullptr && existing_component->IsValidLowLevel())  existing_component->onRegistered.Broadcast(rigName);;
+            if (existing_component != nullptr && IsValid(existing_component) )  existing_component->onRegistered.Broadcast(rigName);;
         } else if (!componentQueue.IsEmpty()) {
             
             UPoseAIMovementComponent* component;
             componentQueue.Dequeue(component);
-            if (component != nullptr && component->IsValidLowLevel())  component->RegisterAs(rigName, true);
+            if (component != nullptr && IsValid(component))  component->RegisterAs(rigName, true);
             
         }
         subjectConnected.Broadcast(rigName, isReconnection);
@@ -371,5 +371,5 @@ bool UPoseAIEventDispatcher::HasComponent(FName name, UPoseAIMovementComponent*&
     if (!componentsByName.Contains(name))
         return false;
     component = componentsByName[name];
-    return component != nullptr && component->IsValidLowLevel();
+    return component != nullptr && IsValid(component);
 }

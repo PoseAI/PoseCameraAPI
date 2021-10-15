@@ -95,7 +95,7 @@ bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLink
 	if (visibilityFlags.isTorso && liveValues.bodyHeight > 0.0f)
 		liveValues.rootTranslation = FVector(
 			liveValues.hipScreen[0] * rigHeight / liveValues.bodyHeight,
-			0.0, //currently no body distance estimate from pose camera
+			0.0f, //currently no body distance estimate from pose camera
 			0.0f
 		);
 

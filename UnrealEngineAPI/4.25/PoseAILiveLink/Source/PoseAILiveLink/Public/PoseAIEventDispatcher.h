@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Components/ActorComponent.h"
 #include "Async/Async.h"
 #include "PoseAIStructs.h"
 #include "PoseAIEventDispatcher.generated.h"
@@ -240,6 +241,7 @@ class POSEAILIVELINK_API UPoseAIMovementComponent : public UActorComponent
     }
 
     virtual void InitializeComponent() override {
+        Super::InitializeComponent();
         InitializeObjects();
     }
 
