@@ -20,21 +20,29 @@ bool isDifferentAndSet(int32 newValue, int32& storedValue) {
 	return isDifferent;
 }
 
-PoseAIRig::PoseAIRig(FName name, FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop) : 
-	name(name), rigType(rigType), useRootMotion(useRootMotion), includeHands(includeHands), isMirrored(isMirrored), isDesktop(isDesktop) {
+
+PoseAIRig::PoseAIRig(FLiveLinkSubjectName name, const FPoseAIHandshake& handshake) :
+	name(name),
+	rigType(FName(handshake.rig)),
+	useRootMotion(handshake.useRootMotion), 
+	includeHands(!handshake.mode.Contains(TEXT("BodyOnly"))),
+	isMirrored(handshake.isMirrored),
+	isDesktop(handshake.mode.Contains(TEXT("Desktop"))) {
 	Configure();
 }
 
-TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> PoseAIRig::PoseAIRigFactory(FName name, FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop) {
+
+TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> PoseAIRig::PoseAIRigFactory(const FLiveLinkSubjectName& name, const FPoseAIHandshake& handshake) {
 	TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> rigPtr;
+	FName rigType = FName(handshake.rig);
 	if (rigType == FName("Mixamo")) {
-		rigPtr = MakeShared<PoseAIRigMixamo, ESPMode::ThreadSafe>(name, rigType, useRootMotion, includeHands, isMirrored, isDesktop);
+		rigPtr = MakeShared<PoseAIRigMixamo, ESPMode::ThreadSafe>(name, handshake);
 	}
 	else if (rigType == FName("MetaHuman")) {
-		rigPtr = MakeShared<PoseAIRigMetaHuman, ESPMode::ThreadSafe>(name, rigType, useRootMotion, includeHands, isMirrored, isDesktop);
+		rigPtr = MakeShared<PoseAIRigMetaHuman, ESPMode::ThreadSafe>(name, handshake);
 	}
 	else {
-		rigPtr = MakeShared<PoseAIRigUE4, ESPMode::ThreadSafe>(name, rigType, useRootMotion, includeHands, isMirrored, isDesktop);;
+		rigPtr = MakeShared<PoseAIRigUE4, ESPMode::ThreadSafe>(name, handshake);;
 	}
 	rigPtr->Configure();
 	return rigPtr;

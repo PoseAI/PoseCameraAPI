@@ -5,8 +5,12 @@
 #include "CoreMinimal.h"
 #include "IPAddress.h"
 #include "Interfaces/IPv4/IPv4Endpoint.h"
-
+#include "Runtime/Sockets/Public/Sockets.h"
 #include "SocketSubsystem.h"
+
+
+TSharedPtr<FSocket> BuildUdpSocket(FString& description, FName protocolType, int32 port);
+
 
 /**
  * Implements a more generic endpoint to allow for both IPv6 and IPv4 networks, based on Epic Games IPv4 endpoint from the Networking module.
@@ -29,12 +33,14 @@ public:
 
 	
 	/**
-	 * Creates and initializes a new IPv4 endpoint from a given FInternetAddr object.
+	 * Creates and initializes a new endpoint from a given FInternetAddr object.
 	 *
 	 * Note: this constructor will be removed after the socket subsystem has been refactored.
 	 *
 	 * @param InternetAddr The Internet address.
 	 */
+
+	
 	FPoseAIEndpoint(const TSharedPtr<FInternetAddr>& InternetAddr)
 	{
 		check(InternetAddr.IsValid());
@@ -44,6 +50,8 @@ public:
 		InternetAddr->GetPort(OutPort);
 		Port = OutPort;
 	}
+
+	bool IsValid() const { return Address != nullptr && Address.IsValid(); }
 
 public:
 

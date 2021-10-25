@@ -2,7 +2,7 @@
 
 #include "SPoseAILiveLinkWidget.h"
 #include "PoseAILiveLinkSourceFactory.h"
-#include "PoseAILiveLinkSource.h"
+#include "PoseAILiveLinkSingleSource.h"
 
 #define LOCTEXT_NAMESPACE "PoseAI"
 
@@ -12,19 +12,19 @@ static TArray<FString> PoseAI_Modes = { "Room", "Desktop", "Portrait", "RoomBody
 static TArray<FString> PoseAI_Rigs = { "UE4", "MetaHuman", "Mixamo" };
 
 const FString SPoseAILiveLinkWidget::section = "PoseLiveLink.SourceConfig";
-int32 SPoseAILiveLinkWidget::portNumIPv4 = POSEAI_DEFAULT_PORTNUM;
-int32 SPoseAILiveLinkWidget::portNumIPv6 = 0;
+int32 SPoseAILiveLinkWidget::portNum = PoseAILiveLinkSingleSource::portDefault;
 int32 SPoseAILiveLinkWidget::syncFPS = 60;
 int32 SPoseAILiveLinkWidget::cameraFPS = 60;
 int32 SPoseAILiveLinkWidget::modeIndex = 0;
 int32 SPoseAILiveLinkWidget::rigIndex = 0;
 bool SPoseAILiveLinkWidget::isMirrored = false;
 bool SPoseAILiveLinkWidget::useRootMotion = true;
+bool SPoseAILiveLinkWidget::isIPv6 = false;
 
 BEGIN_SLATE_FUNCTION_BUILD_OPTIMIZATION
 void SPoseAILiveLinkWidget::Construct(const FArguments& InArgs)
 {
-
+	GConfig->GetBool(*section, TEXT("isIPv6"), isIPv6, GEditorIni);
 	GConfig->GetBool(*section, TEXT("isMirrored"), isMirrored, GEditorIni);
 	GConfig->GetBool(*section, TEXT("useRootMotion"), useRootMotion, GEditorIni);
 
@@ -35,14 +35,27 @@ void SPoseAILiveLinkWidget::Construct(const FArguments& InArgs)
 	if (rigIndex < 0 || rigIndex >= PoseAI_Rigs.Num())
 		rigIndex = 0;
 
-	GConfig->GetInt(*section, TEXT("PortIPv4"), portNumIPv4, GEditorIni);
-	GConfig->GetInt(*section, TEXT("PortIPv6"), portNumIPv6, GEditorIni);
+	GConfig->GetInt(*section, TEXT("PortNumber"), portNum, GEditorIni);
 
 	ChildSlot
 	[
 		SNew(SBox).WidthOverride(300)
 		[
 			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().Padding(1, 3, 3, 3).VAlign(VAlign_Center).HAlign(HAlign_Left).FillWidth(0.85f)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("UseIPv6", "Connect via an IPv6 socket"))
+				]
+				+ SHorizontalBox::Slot().VAlign(VAlign_Center).HAlign(HAlign_Center).FillWidth(0.15f)
+				[
+					SAssignNew(ipv6CheckBox, SCheckBox)
+					.IsChecked(isIPv6 ? ECheckBoxState::Checked : ECheckBoxState::Unchecked)
+				]
+			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				SNew(SHorizontalBox)
@@ -53,22 +66,8 @@ void SPoseAILiveLinkWidget::Construct(const FArguments& InArgs)
 				+ SHorizontalBox::Slot().Padding(3, 3, 1, 3).VAlign(VAlign_Center).HAlign(HAlign_Right).FillWidth(0.25f)
 				[
 					SAssignNew(portInput, SEditableTextBox)
-					.OnTextCommitted(this, &SPoseAILiveLinkWidget::UpdatePortIPv4)
-				.Text(FText::FromString(FString::FromInt(portNumIPv4)))
-				]
-			]
-			+ SVerticalBox::Slot().AutoHeight()
-				[
-					SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot().Padding(1, 3, 3, 3).VAlign(VAlign_Center).HAlign(HAlign_Left).FillWidth(0.75f)
-				[
-					SNew(STextBlock).Text(LOCTEXT("PortIPv6", "Port for IPv6 (0 if unused)"))
-				]
-			+ SHorizontalBox::Slot().Padding(3, 3, 1, 3).VAlign(VAlign_Center).HAlign(HAlign_Right).FillWidth(0.25f)
-				[
-					SAssignNew(portInput, SEditableTextBox)
-					.OnTextCommitted(this, &SPoseAILiveLinkWidget::UpdatePortIPv6)
-				.Text(FText::FromString(FString::FromInt(portNumIPv6)))
+					.OnTextCommitted(this, &SPoseAILiveLinkWidget::UpdatePort)
+				.Text(FText::FromString(FString::FromInt(portNum)))
 				]
 			]
 			+ SVerticalBox::Slot().AutoHeight()
@@ -180,41 +179,21 @@ void SPoseAILiveLinkWidget::Construct(const FArguments& InArgs)
 END_SLATE_FUNCTION_BUILD_OPTIMIZATION
 
 
-void SPoseAILiveLinkWidget::UpdatePortIPv4(const FText& InText, ETextCommit::Type type)
+void SPoseAILiveLinkWidget::UpdatePort(const FText& InText, ETextCommit::Type type)
 {
-	portNumIPv4 = FCString::Atoi(*(InText.ToString()));
+	portNum = FCString::Atoi(*(InText.ToString()));
 }
 
-void SPoseAILiveLinkWidget::UpdatePortIPv6(const FText& InText, ETextCommit::Type type)
+
+bool SPoseAILiveLinkWidget::IsPortValid() const
 {
-	portNumIPv6 = FCString::Atoi(*(InText.ToString()));
+	if (portNum < 1028 || portNum > 49151) {
+		FLiveLinkLog::Warning(TEXT("PoseAI: %d is an invalid port number. Set a valid port number (>1028 and <49151)."), portNum);
+		return false;
+	}
 	
-}
-
-bool SPoseAILiveLinkWidget::ArePortsValid() const
-{
-	if (portNumIPv4 == 0 && portNumIPv6 == 0) {
-		FLiveLinkLog::Warning(TEXT("PoseAI: You must enable at least one of IPv4 or IPv6 ports."));
-		return false;
-	}
-	if (portNumIPv4 == portNumIPv6) {
-		FLiveLinkLog::Warning(TEXT("PoseAI: Can not use same port for IPv4 and IPv6."));
-		return false;
-	}
-	if (portNumIPv4 != 0 && (portNumIPv4 < 1028 || portNumIPv4 > 49151)) {
-		FLiveLinkLog::Warning(TEXT("PoseAI: %d is an invalid port number. Set a valid port number (>1028 and <49151) to enable IPv4 or 0 to disable."), portNumIPv4);
-		return false;
-	}
-	if (portNumIPv6 != 0 && (portNumIPv6 < 1028 || portNumIPv6 > 49151)) {
-		FLiveLinkLog::Warning(TEXT("PoseAI: %d is an invalid port number. Set a valid port number (>1028 and <49151) to enable IPv6 or 0 to disable."), portNumIPv6);
-		return false;
-	}
-	if (!PoseAILiveLinkSource::IsValidPort(portNumIPv4)) {
-		FLiveLinkLog::Warning(TEXT("PoseAI: Cannot set two sources with the same port.  %d is in use already."), portNumIPv4);
-		return false;
-	}
-	if (!PoseAILiveLinkSource::IsValidPort(portNumIPv6)) {
-		FLiveLinkLog::Warning(TEXT("PoseAI: Cannot set two sources with the same port.  %d is in use already."), portNumIPv6);
+	if (!PoseAILiveLinkSingleSource::IsValidPort(portNum)) {
+		FLiveLinkLog::Warning(TEXT("PoseAI: Cannot set two sources with the same port.  %d is in use already."), portNum);
 		return false;
 	}
 	return true;
@@ -255,7 +234,7 @@ void SPoseAILiveLinkWidget::disableExistingSource()
 	TSharedPtr<ILiveLinkSource> linkSource = source.Pin();
 	if (linkSource.IsValid()) { 
 		UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: disabling existing source"));
-		((PoseAILiveLinkSource*)linkSource.Get())->disable();
+		((PoseAILiveLinkSingleSource*)linkSource.Get())->disable();
 	}
 }
 
@@ -268,11 +247,9 @@ TSharedPtr<ILiveLinkSource> SPoseAILiveLinkWidget::CreateSource(const FString& c
 	handshake.mode = PoseAI_Modes[modeIndex];
 	handshake.syncFPS = syncFPS;
 	handshake.cameraFPS = cameraFPS;
+	handshake.useRootMotion = useRootMotion;
 	UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Set handshake to %s"), *(handshake.ToString()));
-	TSharedPtr<ILiveLinkSource> sharedPtr = MakeShared<PoseAILiveLinkSource>(portNumIPv4, portNumIPv6, handshake, useRootMotion);
-	StaticCastSharedPtr< PoseAILiveLinkSource>(sharedPtr)->BindServers();
-	source = sharedPtr;
-	return sharedPtr;
+	return MakeShared<PoseAILiveLinkSingleSource>(portNum, isIPv6, handshake);
 }
 
 FReply SPoseAILiveLinkWidget::OnToggleModeClicked()
@@ -297,16 +274,15 @@ FReply SPoseAILiveLinkWidget::OnToggleRigClicked()
 
 FReply SPoseAILiveLinkWidget::OnOkClicked()
 {
-
 	ReadCheckBox(mirroredCheckBox, isMirrored);
 	ReadCheckBox(rootMotionCheckBox, useRootMotion);
+	ReadCheckBox(ipv6CheckBox, isIPv6);
 	
 	GConfig->SetBool(*section, TEXT("isMirror"), isMirrored, GEditorIni);
 	GConfig->SetBool(*section, TEXT("useRootMotion"), useRootMotion, GEditorIni);
 
-	if (ArePortsValid()) {
-		GConfig->SetInt(*section, TEXT("PortIPv4"), portNumIPv4, GEditorIni);
-		GConfig->SetInt(*section, TEXT("PortIPv6"), portNumIPv6, GEditorIni);
+	if (IsPortValid()) {
+		GConfig->SetInt(*section, TEXT("PortNumber"), portNum, GEditorIni);
 		GConfig->Flush(false, GEditorIni);
 		FString connectionString = "";
 		TSharedPtr<ILiveLinkSource> src = CreateSource(connectionString);
@@ -317,7 +293,6 @@ FReply SPoseAILiveLinkWidget::OnOkClicked()
 			*FString(isMirrored ? TEXT("mirrored to camera"): TEXT("third person")),
 			*FString(useRootMotion ? TEXT("uses root motion"): TEXT("translate motion in the hip/pelvis bone"))
 		);
-
 	}
 	return FReply::Handled();
 }

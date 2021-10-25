@@ -64,6 +64,7 @@ FString FPoseAIHandshake::ToString() const {
             "\"name\":\"Unreal LiveLink\","
             "\"rig\":\"%s\", "
             "\"mode\":\"%s\", "
+            "\"context\":\"%s\", "
             "\"mirror\":\"%s\", "
             "\"syncFPS\": %d, "
             "\"cameraFPS\": %d, "
@@ -71,6 +72,7 @@ FString FPoseAIHandshake::ToString() const {
             "}}"),
         *rig,
         *mode,
+        *context,
         *(YesNoString(isMirrored)),
         syncFPS,
         cameraFPS,

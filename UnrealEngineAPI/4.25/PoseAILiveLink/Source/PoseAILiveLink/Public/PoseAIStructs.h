@@ -34,6 +34,10 @@ struct POSEAILIVELINK_API FPoseAIHandshake
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
     FString rig = "UE4";
 
+    /* the model context.  Will enable new AI models as they are deployed*/
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
+    FString context = "Default";
+
     /* the target frame rate, where phone does interpolation and smoothing for animations. Events are raw.*/
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
     int32 syncFPS = 60;
@@ -49,6 +53,10 @@ struct POSEAILIVELINK_API FPoseAIHandshake
     /* controls compactness of packet.  0 is verbose JSON (mainly use for debugging), 1 is fairly compact JSON (preferred as of this plugin release).  We may add even more condensed formats in the future.*/
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
         int32 packetFormat = 1;
+
+    /* whether to include motion within camera frame in hips or in root*/
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
+    bool useRootMotion = false;
 
     FString ToString() const;
 
@@ -118,7 +126,7 @@ struct POSEAILIVELINK_API FPoseAIEventPair : public FPoseAIEventPairBase
 {
     GENERATED_BODY()
 public:
-    /**mangitude of event where approrpiate */
+    /**magnitude of event where approrpiate */
     UPROPERTY(VisibleAnywhere, Category = "PoseAI Event")
         float Magnitude = 0.0f;
 
@@ -223,11 +231,11 @@ public:
     UPROPERTY(BlueprintReadOnly, Category = "PosPeAI")
         int32 HandZoneR = 5;
 
-    /** Heading in radians of torso.  0 is heading to camera */
+    /** Heading in degrees of torso.  0 is heading to camera */
     UPROPERTY(BlueprintReadOnly, Category = "PoseAI")
         float ChestYaw = 0.0f;
 
-    /** Heading in radians of flattened left foot to right foot vector relative to camera. 0 is parallel to camera */
+    /** Heading in degrees of flattened left foot to right foot vector relative to camera. 0 is parallel to camera */
     UPROPERTY(BlueprintReadOnly, Category = "PoseAI")
         float StanceYaw = 0.0f;
 

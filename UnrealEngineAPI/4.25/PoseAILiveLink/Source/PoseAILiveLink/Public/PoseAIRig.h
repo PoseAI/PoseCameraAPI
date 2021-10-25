@@ -10,7 +10,6 @@
 #include "Json.h"
 #include "PoseAIStructs.h"
 
-
 #define LOCTEXT_NAMESPACE "PoseAI"
 
 
@@ -24,13 +23,14 @@ class POSEAILIVELINK_API PoseAIRig
 	FLiveLinkStaticDataStruct MakeStaticData();
 	bool ProcessFrame(const TSharedPtr<FJsonObject>, FLiveLinkAnimationFrameData& data);
 	static bool IsFrameData(const TSharedPtr<FJsonObject> jsonObject);
-	static TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> PoseAIRigFactory(FName name, FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop);
-    
+	static TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> PoseAIRigFactory(const FLiveLinkSubjectName& name, const FPoseAIHandshake& handshake);
+	FName RigType() { return rigType; }
+
 	FPoseAIVisibilityFlags visibilityFlags;
     FPoseAILiveValues liveValues;
 	FPoseAIScalarStruct scalars;
 	FPoseAIEventStruct events;
-
+  
   protected:
 	FPoseAIVerbose verbose;
 	static const FString fieldBody;
@@ -43,7 +43,7 @@ class POSEAILIVELINK_API PoseAIRig
 	static const FString fieldVectors;
 	
   protected:
-	PoseAIRig(FName name, FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop);
+	PoseAIRig(FLiveLinkSubjectName name, const FPoseAIHandshake& handshake);
 	virtual ~PoseAIRig() {
 	};
 
@@ -51,7 +51,7 @@ class POSEAILIVELINK_API PoseAIRig
 	   These bone lengths ensure a sensible animation is created even if user does not retarget from livelink */
 	virtual void Configure(); //impure for MacOS compatibility
 	
-	FName name;
+	FLiveLinkSubjectName name;
 	FName rigType;
 	bool useRootMotion;
 	bool includeHands;
@@ -98,24 +98,21 @@ class POSEAILIVELINK_API PoseAIRig
 
 class POSEAILIVELINK_API PoseAIRigUE4 : public PoseAIRig {
   public:
-	PoseAIRigUE4(FName name, FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop) :
-		PoseAIRig(name, rigType, useRootMotion, includeHands, isMirrored, isDesktop) {};
+	PoseAIRigUE4(FLiveLinkSubjectName name, const FPoseAIHandshake& handshake) : PoseAIRig(name, handshake) {};
   private:
 	void Configure();
 };
 
 class POSEAILIVELINK_API PoseAIRigMixamo : public PoseAIRig {
   public:
-	PoseAIRigMixamo(FName name, FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop) :
-		PoseAIRig(name, rigType, useRootMotion, includeHands, isMirrored, isDesktop) {};
+	PoseAIRigMixamo(FLiveLinkSubjectName name, const FPoseAIHandshake& handshake) :	PoseAIRig(name, handshake) {};
 private:
 	void Configure();
 };
 
 class POSEAILIVELINK_API PoseAIRigMetaHuman : public PoseAIRig {
 public:
-	PoseAIRigMetaHuman(FName name, FName rigType, bool useRootMotion, bool includeHands, bool isMirrored, bool isDesktop) :
-		PoseAIRig(name, rigType, useRootMotion, includeHands, isMirrored, isDesktop) {};
+	PoseAIRigMetaHuman(FLiveLinkSubjectName name, const FPoseAIHandshake& handshake) : PoseAIRig(name, handshake) {};
 private:
 	void Configure();
 };

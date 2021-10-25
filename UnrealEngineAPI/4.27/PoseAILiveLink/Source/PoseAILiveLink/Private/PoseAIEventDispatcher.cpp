@@ -1,9 +1,7 @@
 // Copyright Pose AI Ltd 2021
 
 #include "PoseAIEventDispatcher.h"
-
-
-
+#include "PoseAILiveLinkSingleSource.h"
 
 void UStepCounter::Halt(bool fade) {
     num_ = 0;
@@ -77,8 +75,27 @@ UStepCounter* UStepCounter::SetProperties(float timeoutIn, float fadeDuration) {
 }
 
 
+bool UPoseAIMovementComponent::AddSourceNextOpenPort(const FPoseAIHandshake& handshake, bool isIPv6, int32& portNum, FString& myIP) {
+    portNum = PoseAILiveLinkSingleSource::portDefault;
+    while (!PoseAILiveLinkSingleSource::IsValidPort(portNum)) {
+        portNum++;
+        if (portNum > 49151)
+            return false;
+    }
+    return AddSource(handshake, myIP, portNum, isIPv6);
+}
+
+bool UPoseAIMovementComponent::AddSource(const FPoseAIHandshake& handshake, FString& myIP, int32 portNum, bool isIPv6) {
+    InitializeObjects();
+   FLiveLinkSubjectName addedSubjectName;
+   PoseAILiveLinkServer::GetIP(myIP);
+    return PoseAILiveLinkSingleSource::AddSource(handshake, portNum, isIPv6, addedSubjectName) &&
+        UPoseAIEventDispatcher::GetDispatcher()->RegisterComponentByName(this, addedSubjectName, true);
+}
+
+
 void UPoseAIMovementComponent::InitializeObjects() {
-     footsteps = NewObject<UStepCounter>();
+    footsteps = NewObject<UStepCounter>();
     leftsteps = NewObject<UStepCounter>()->SetProperties(0.3f, 0.1f);
     rightsteps = NewObject<UStepCounter>()->SetProperties(0.3f, 0.1f);
     feetsplits = NewObject<UStepCounter>();
@@ -90,11 +107,11 @@ void UPoseAIMovementComponent::InitializeObjects() {
     jumps = NewObject<UStepCounter>();
 }
 
-bool UPoseAIMovementComponent::RegisterAs(FName name, bool siezeIfTaken) {
+bool UPoseAIMovementComponent::RegisterAs(FLiveLinkSubjectName name, bool siezeIfTaken) {
     InitializeObjects();
     bool success = UPoseAIEventDispatcher::GetDispatcher()->RegisterComponentByName(this, name, siezeIfTaken);
     if (success)
-        onRegistered.Broadcast(name);
+        onRegistered.Broadcast(name, PoseAILiveLinkSingleSource::GetConnectionName(name));
     return success;
 }
 
@@ -103,10 +120,17 @@ void UPoseAIMovementComponent::RegisterAsFirstAvailable() {
     UPoseAIEventDispatcher::GetDispatcher()->RegisterComponentForFirstAvailableSubject(this);
 }
 
+void UPoseAIMovementComponent::CloseSource() {
+    UPoseAIEventDispatcher::GetDispatcher()->BroadcastCloseSource(subjectName);
+}
+
+void UPoseAIMovementComponent::Disconnect() {
+    UPoseAIEventDispatcher::GetDispatcher()->BroadcastDisconnect(subjectName);
+}
 
 void UPoseAIMovementComponent::Deregister() {
-    UPoseAIEventDispatcher::GetDispatcher()->RegisterComponentByName(this, NAME_None,true);
-    subjectName = NAME_None;
+    UPoseAIEventDispatcher::GetDispatcher()->RegisterComponentByName(this, FLiveLinkSubjectName(NAME_None) ,true);
+    subjectName = FLiveLinkSubjectName(NAME_None);
 }
 
 void UPoseAIMovementComponent::ChangeModelConfig(FPoseAIModelConfig config) {
@@ -118,7 +142,7 @@ void UPoseAIMovementComponent::SetHandshake(const FPoseAIHandshake& handshake) {
 }
 
 
-bool UPoseAIEventDispatcher::RegisterComponentByName(UPoseAIMovementComponent* component, FName name, bool siezeIfTaken) {
+bool UPoseAIEventDispatcher::RegisterComponentByName(UPoseAIMovementComponent* component, const FLiveLinkSubjectName& name, bool siezeIfTaken) {
     UE_LOG(LogTemp, Display, TEXT("PoseAI: Event dispatcher, registering %s"), *(name.ToString()));
 
     UPoseAIMovementComponent* existing_component;
@@ -129,7 +153,7 @@ bool UPoseAIEventDispatcher::RegisterComponentByName(UPoseAIMovementComponent* c
 
     FName prev = component->GetSubjectName();
     componentsByName.Remove(prev);
-    if (name != NAME_None)
+    if (name.Name != NAME_None)
         componentsByName.Emplace(name, component);
     component->lastFrameReceived = FDateTime::Now();
     component->subjectName = name;
@@ -141,14 +165,14 @@ UPoseAIEventDispatcher* UPoseAIEventDispatcher::theInstance = nullptr;
 
 
 void UPoseAIEventDispatcher::RegisterComponentForFirstAvailableSubject(UPoseAIMovementComponent* component) {
-    FName firstUnbound = GetFirstUnboundSubject();
-    if (firstUnbound != NAME_None)
+   FLiveLinkSubjectName firstUnbound = GetFirstUnboundSubject();
+    if (firstUnbound.Name != NAME_None)
         component->RegisterAs(firstUnbound, true);
     else
         componentQueue.Enqueue(component);
 }
 
-FName UPoseAIEventDispatcher::GetFirstUnboundSubject(bool excludeIdleSubjects) {
+FLiveLinkSubjectName UPoseAIEventDispatcher::GetFirstUnboundSubject(bool excludeIdleSubjects) {
     for (auto& elem : knownConnectionsWithTime) {
         if (excludeIdleSubjects && (FDateTime::Now() - elem.Value).GetTotalSeconds() > timeoutInSeconds) continue;
         UPoseAIMovementComponent* component;
@@ -159,215 +183,203 @@ FName UPoseAIEventDispatcher::GetFirstUnboundSubject(bool excludeIdleSubjects) {
 }
 
 
-void UPoseAIEventDispatcher::BroadcastSubjectConnected(FName rigName) {
-    knownConnectionsWithTime.Emplace(rigName, FDateTime::Now());
-    AsyncTask(ENamedThreads::GameThread, [this, rigName]() {
+void UPoseAIEventDispatcher::BroadcastSubjectConnected(const FLiveLinkSubjectName& subjectName) {
+    knownConnectionsWithTime.Emplace(subjectName, FDateTime::Now());
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName]() {
         UPoseAIMovementComponent* existing_component;
-        bool isReconnection = HasComponent(rigName, existing_component);
+        bool isReconnection = HasComponent(subjectName, existing_component);
         if (isReconnection) {
-            if (existing_component != nullptr && IsValid(existing_component) )  existing_component->onRegistered.Broadcast(rigName);;
+            if (existing_component != nullptr && IsValid(existing_component) )  existing_component->onRegistered.Broadcast(subjectName,  PoseAILiveLinkSingleSource::GetConnectionName(subjectName));
         } else if (!componentQueue.IsEmpty()) {
-            
             UPoseAIMovementComponent* component;
             componentQueue.Dequeue(component);
-            if (component != nullptr && IsValid(component))  component->RegisterAs(rigName, true);
-            
+            if (component != nullptr && IsValid(component))  component->RegisterAs(subjectName, true);
         }
-        subjectConnected.Broadcast(rigName, isReconnection);
+        subjectConnected.Broadcast(subjectName, isReconnection);
      });
 }
 
-void UPoseAIEventDispatcher::BroadcastConfigUpdate(FName rigName, FPoseAIModelConfig config) {
-    modelConfigUpdate.Broadcast(rigName, config);
+void UPoseAIEventDispatcher::BroadcastConfigUpdate(const FLiveLinkSubjectName& subjectName, FPoseAIModelConfig config) {
+    modelConfigUpdate.Broadcast(subjectName, config);
 }
+
+void UPoseAIEventDispatcher::BroadcastDisconnect(const FLiveLinkSubjectName& subjectName) {
+    disconnect.Broadcast(subjectName);
+}
+
+void UPoseAIEventDispatcher::BroadcastCloseSource(const FLiveLinkSubjectName& subjectName) {
+    closeSource.Broadcast(subjectName);
+}
+
 
 void UPoseAIEventDispatcher::SetHandshake(const FPoseAIHandshake& handshake) {
     handshakeUpdate.Broadcast(handshake);
 }
 
-
-void UPoseAIEventDispatcher::BroadcastFrameReceived(FName rigName) {
-
-    knownConnectionsWithTime.Add(rigName,FDateTime::Now());
-    AsyncTask(ENamedThreads::GameThread, [this, rigName]() {
-        frameReceived.Broadcast(rigName);
+void UPoseAIEventDispatcher::BroadcastFrameReceived(const FLiveLinkSubjectName& subjectName) {
+    knownConnectionsWithTime.Add(subjectName,FDateTime::Now());
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) component->lastFrameReceived = FDateTime::Now();
+        if (HasComponent(subjectName, component)) component->lastFrameReceived = FDateTime::Now();
      });
 }
 
-void UPoseAIEventDispatcher::BroadcastVisibilityChange(FName rigName, FPoseAIVisibilityFlags visibilityFlags){
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, visibilityFlags]() {
-        visibilityChange.Broadcast(rigName, visibilityFlags);
+void UPoseAIEventDispatcher::BroadcastVisibilityChange(const FLiveLinkSubjectName& subjectName, FPoseAIVisibilityFlags visibilityFlags){
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, visibilityFlags]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) {
-            component->onVisibilityChange.Broadcast(rigName, visibilityFlags);
+        if (HasComponent(subjectName, component)) {
+            component->onVisibilityChange.Broadcast(visibilityFlags);
             component->visibilityFlags = visibilityFlags;
         }
      });
 }
 
-void UPoseAIEventDispatcher::BroadcastLiveValues(FName rigName, FPoseAILiveValues values){
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, values]() {
-        liveValues.Broadcast(rigName, values);
+void UPoseAIEventDispatcher::BroadcastLiveValues(const FLiveLinkSubjectName& subjectName, FPoseAILiveValues values){
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, values]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) {
-            component->onLiveValues.Broadcast(rigName, values);
+        if (HasComponent(subjectName, component)) {
+            component->onLiveValues.Broadcast(values);
             component->SetLiveValues(values);
         }
     });
 }
 
-void UPoseAIEventDispatcher::BroadcastFootsteps(FName rigName, float stepHeight, bool isLeftStep) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, stepHeight, isLeftStep]() {
-        footsteps.Broadcast(rigName, stepHeight, isLeftStep);
+void UPoseAIEventDispatcher::BroadcastFootsteps(const FLiveLinkSubjectName& subjectName, float stepHeight, bool isLeftStep) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, stepHeight, isLeftStep]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) {
+        if (HasComponent(subjectName, component)) {
             component->footsteps->RegisterStep(stepHeight);
-            component->onFootstep.Broadcast(rigName, stepHeight, isLeftStep);
+            component->onFootstep.Broadcast(stepHeight, isLeftStep);
         }
     });
 }
-void UPoseAIEventDispatcher::BroadcastFeetsplits(FName rigName, float width, bool isExpanding) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, width, isExpanding]() {
-        footsplits.Broadcast(rigName, width, isExpanding);
+void UPoseAIEventDispatcher::BroadcastFeetsplits(const FLiveLinkSubjectName& subjectName, float width, bool isExpanding) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, width, isExpanding]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) {
+        if (HasComponent(subjectName, component)) {
             component->feetsplits->RegisterStep(width);
-            component->onFeetsplit.Broadcast(rigName, width, isExpanding);
+            component->onFeetsplit.Broadcast(width, isExpanding);
         }
         });
 }
-void UPoseAIEventDispatcher::BroadcastArmpumps(FName rigName, float stepHeight) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, stepHeight]() {
-        armpumps.Broadcast(rigName, stepHeight);
+void UPoseAIEventDispatcher::BroadcastArmpumps(const FLiveLinkSubjectName& subjectName, float stepHeight) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, stepHeight]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) {
+        if (HasComponent(subjectName, component)) {
             component->armpumps->RegisterStep(stepHeight);
-            component->onArmpump.Broadcast(rigName, stepHeight);
+            component->onArmpump.Broadcast(stepHeight);
         }
     });
 }
 
-void UPoseAIEventDispatcher::BroadcastArmflexes(FName rigName, float width, bool isExpanding) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, width, isExpanding]() {
-        armflexes.Broadcast(rigName, width, isExpanding);
+void UPoseAIEventDispatcher::BroadcastArmflexes(const FLiveLinkSubjectName& subjectName, float width, bool isExpanding) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, width, isExpanding]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) {
+        if (HasComponent(subjectName, component)) {
             component->armflexes->RegisterStep(width);
-            component->onArmflex.Broadcast(rigName, width, isExpanding);
+            component->onArmflex.Broadcast(width, isExpanding);
         }
         });
 }
 
-void UPoseAIEventDispatcher::BroadcastArmjacks(FName rigName, bool isRising) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, isRising]() {
-        armjacks.Broadcast(rigName, isRising);
+void UPoseAIEventDispatcher::BroadcastArmjacks(const FLiveLinkSubjectName& subjectName, bool isRising) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, isRising]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) {
+        if (HasComponent(subjectName, component)) {
             component->armjacks->RegisterStep(0.5f);
-            component->onArmjack.Broadcast(rigName, isRising);
+            component->onArmjack.Broadcast(isRising);
         }
         });
 }
 
 
-
-void UPoseAIEventDispatcher::BroadcastSidestepL(FName rigName, bool isLeftStep) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, isLeftStep]() {
-        sidestepLeftFoot.Broadcast(rigName, isLeftStep);
+void UPoseAIEventDispatcher::BroadcastSidestepL(const FLiveLinkSubjectName& subjectName, bool isLeftStep) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, isLeftStep]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) {
+        if (HasComponent(subjectName, component)) {
             ((isLeftStep) ? component->leftsteps : component->rightsteps)->RegisterStep(1.0f);
-            component->onSidestepLeftFoot.Broadcast(rigName, isLeftStep);
+            component->onSidestepLeftFoot.Broadcast(isLeftStep);
         }
         });
 }
 
-void UPoseAIEventDispatcher::BroadcastSidestepR(FName rigName, bool isLeftStep) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, isLeftStep]() {
-        sidestepRightFoot.Broadcast(rigName, isLeftStep);
+void UPoseAIEventDispatcher::BroadcastSidestepR(const FLiveLinkSubjectName& subjectName, bool isLeftStep) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, isLeftStep]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) {
+        if (HasComponent(subjectName, component)) {
             ((isLeftStep) ? component->leftsteps : component->rightsteps)->RegisterStep(1.0f);
-            component->onSidestepRightFoot.Broadcast(rigName, isLeftStep);
+            component->onSidestepRightFoot.Broadcast(isLeftStep);
         }
         });
 }
 
-void UPoseAIEventDispatcher::BroadcastJumps(FName rigName) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName]() {
-        jumps.Broadcast(rigName);
+void UPoseAIEventDispatcher::BroadcastJumps(const FLiveLinkSubjectName& subjectName) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) {
-            component->onJump.Broadcast(rigName);
+        if (HasComponent(subjectName, component)) {
+            component->onJump.Broadcast();
             component->jumps->RegisterStep(1.0f);
         }
         });
 }
 
-void UPoseAIEventDispatcher::BroadcastCrouches(FName rigName, bool isCrouching) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, isCrouching]() {
-        crouches.Broadcast(rigName, isCrouching);
+void UPoseAIEventDispatcher::BroadcastCrouches(const FLiveLinkSubjectName& subjectName, bool isCrouching) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, isCrouching]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) component->onCrouch.Broadcast(rigName, isCrouching);
+        if (HasComponent(subjectName, component)) component->onCrouch.Broadcast(isCrouching);
         });
 }
 
-void UPoseAIEventDispatcher::BroadcastArmGestureL(FName rigName, int32 gesture) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, gesture]() {
-        armGestureLeftOrDual.Broadcast(rigName, gesture);
+void UPoseAIEventDispatcher::BroadcastArmGestureL(const FLiveLinkSubjectName& subjectName, int32 gesture) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, gesture]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) {
-            component->onArmGestureLeft.Broadcast(rigName, gesture);
+        if (HasComponent(subjectName, component)) {
+            component->onArmGestureLeft.Broadcast(gesture);
             if (gesture == 10) {
                 component->armflapL->RegisterStep(1.0f);
-                component->onArmflapL.Broadcast(rigName);
+                component->onArmflapL.Broadcast();
             }
         }
         });
 }
 
-void UPoseAIEventDispatcher::BroadcastArmGestureR(FName rigName, int32 gesture) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, gesture]() {
-        armGestureRight.Broadcast(rigName, gesture);
+void UPoseAIEventDispatcher::BroadcastArmGestureR(const FLiveLinkSubjectName& subjectName, int32 gesture) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, gesture]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) {
-            component->onArmGestureRight.Broadcast(rigName, gesture);
+        if (HasComponent(subjectName, component)) {
+            component->onArmGestureRight.Broadcast(gesture);
             if (gesture == 10) {
                 component->armflapR->RegisterStep(1.0f);
-                component->onArmflapR.Broadcast(rigName);
+                component->onArmflapR.Broadcast();
             }
         }
         });
 }
 
-void UPoseAIEventDispatcher::BroadcastHandToZoneL(FName rigName, int32 zone) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, zone]() {
-        handToZoneL.Broadcast(rigName, zone);
+void UPoseAIEventDispatcher::BroadcastHandToZoneL(const FLiveLinkSubjectName& subjectName, int32 zone) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, zone]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) component->onHandToZoneL.Broadcast(rigName, zone);
+        if (HasComponent(subjectName, component)) component->onHandToZoneL.Broadcast(zone);
         });
 }
 
 
-void UPoseAIEventDispatcher::BroadcastHandToZoneR(FName rigName, int32 zone) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName, zone]() {
-        handToZoneR.Broadcast(rigName, zone);
+void UPoseAIEventDispatcher::BroadcastHandToZoneR(const FLiveLinkSubjectName& subjectName, int32 zone) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName, zone]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) component->onHandToZoneR.Broadcast(rigName, zone);
+        if (HasComponent(subjectName, component)) component->onHandToZoneR.Broadcast(zone);
         });
 }
 
-void UPoseAIEventDispatcher::BroadcastStationary(FName rigName) {
-    AsyncTask(ENamedThreads::GameThread, [this, rigName]() {
+void UPoseAIEventDispatcher::BroadcastStationary(const FLiveLinkSubjectName& subjectName) {
+    AsyncTask(ENamedThreads::GameThread, [this, subjectName]() {
         UPoseAIMovementComponent* component;
-        if (HasComponent(rigName, component)) component->onStationary.Broadcast(rigName);
+        if (HasComponent(subjectName, component)) component->onStationary.Broadcast();
         });
 }
 
 
-bool UPoseAIEventDispatcher::HasComponent(FName name, UPoseAIMovementComponent*& component) {
+bool UPoseAIEventDispatcher::HasComponent(const FLiveLinkSubjectName& name, UPoseAIMovementComponent*& component) {
     if (!componentsByName.Contains(name))
         return false;
     component = componentsByName[name];

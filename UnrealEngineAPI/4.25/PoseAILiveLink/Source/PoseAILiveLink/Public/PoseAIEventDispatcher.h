@@ -5,33 +5,34 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Async/Async.h"
+#include "LiveLinkTypes.h"
 #include "PoseAIStructs.h"
 #include "PoseAIEventDispatcher.generated.h"
 
 
 #define LOCTEXT_NAMESPACE "PoseAI"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAISubjectConnected, FName, Name, bool, isReconnection);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPoseAIRegisteredAs, FName, Name);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPoseAIFrameReceived, FName, Name);
+DECLARE_MULTICAST_DELEGATE_OneParam(FPoseAIDisconnect, const FLiveLinkSubjectName&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FPoseAIHandshakeUpdate, const FPoseAIHandshake&);
-DECLARE_MULTICAST_DELEGATE_TwoParams(FPoseAIConfigUpdate, FName, FPoseAIModelConfig);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FPoseAIConfigUpdate, const FLiveLinkSubjectName&, FPoseAIModelConfig);
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAIVisibilityChange, FName, Name, FPoseAIVisibilityFlags, Flags);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAILiveValuesUpdate, FName, Name, FPoseAILiveValues, LiveValues);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FPoseAIFootstepEvent, FName, Name, float, height, bool, isLeftFoot);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAISidestepEvent, FName, Name, bool, isLeftStep);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FPoseAIFootsplitEvent, FName, Name, float, width, bool, isExpanding);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAIArmpumpEvent, FName, Name, float, height);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FPoseAIArmflexEvent, FName, Name, float, width, bool, isExpanding);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAIArmjackEvent, FName, Name, bool, isRising);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPoseAIArmflapEvent, FName, Name);
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPoseAIJumpEvent, FName, Name);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAICrouchEvent, FName, Name, bool, isCrouching);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAIHandToZoneEvent, FName, Name, int32, zone);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAIArmGestureEvent, FName, Name, int32, armGesture);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPoseAIStationaryEvent, FName, Name);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAISubjectConnected, const FLiveLinkSubjectName&, SubjectName, bool, isReconnection);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAIRegisteredAs, const FLiveLinkSubjectName&, SubjectName, FName, ConnectionName);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FPoseAIFrameReceived);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPoseAIVisibilityChange, const FPoseAIVisibilityFlags&, Flags);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPoseAILiveValuesUpdate, const FPoseAILiveValues&, LiveValues);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAIFootstepEvent, float, height, bool, isLeftFoot);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPoseAISidestepEvent,  bool, isLeftStep);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAIFootsplitEvent, float, width, bool, isExpanding);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPoseAIArmpumpEvent, float, height);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPoseAIArmflexEvent, float, width, bool, isExpanding);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPoseAIArmjackEvent,bool, isRising);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FPoseAIArmflapEvent);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FPoseAIJumpEvent);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPoseAICrouchEvent, bool, isCrouching);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPoseAIHandToZoneEvent, int32, zone);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPoseAIArmGestureEvent,  int32, armGesture);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FPoseAIStationaryEvent);
 
 
 
@@ -116,25 +117,45 @@ class POSEAILIVELINK_API UPoseAIMovementComponent : public UActorComponent
     friend UPoseAIEventDispatcher;
  
  public:
-     /** sets this component as the receipient for events for the specific name */
+     /** Adds a LiveLink source listening for Posecam at the designated port, but will overwrite an existing listener so developer needs to manage if using multiple portss (or use the AddSourceNextOpenPort node instead)*/
      UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
-     void RegisterAsFirstAvailable();
-     
-     UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
-     bool RegisterAs(FName name, bool siezeIfTaken=true);
-     
-     UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
-     void Deregister();
+     bool AddSource(const FPoseAIHandshake& handshake, FString& myIP, int32 portNum=8080, bool isIPv6 = false);
 
-     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "PoseAI Setup")
-     FName GetSubjectName() { return subjectName; }
+     /** Adds a LiveLink source listening for Posecam at the next open port beginning at 8080*/
+     UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
+     bool AddSourceNextOpenPort(const FPoseAIHandshake& handshake, bool isIPv6, int32& portNum, FString& myIP);
 
+     /** Sends a message to the connected PoseCamera to reconfigure the model with user settings */
      UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
      void ChangeModelConfig(FPoseAIModelConfig config);
+
+     /** sends disconnect message to app and clsoes source, freeing up Port*/
+     UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
+     void CloseSource();
+
+     /** sends disconnect message to app but does not clsoe source */
+     UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
+     void Disconnect();
+
+     /** Get the LiveLink subject name associated with this component */
+     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "PoseAI Setup")
+     FLiveLinkSubjectName GetSubjectName() { return subjectName; }
+
+     /** Will assign component to the next available Pose AI LiveLink source.  Useful if sources managed with a preswet (Otherwise prefer use of AddSource nodes) */
+     UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
+     void RegisterAsFirstAvailable();
 
      /** sets the handshake for all sources */
      UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
      static void SetHandshake(const FPoseAIHandshake& handshake);
+
+
+     UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
+     bool RegisterAs(FLiveLinkSubjectName name, bool siezeIfTaken = true);
+
+     UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
+     void Deregister();
+
 
      UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Category = "PoseAI Events")
      FDateTime lastFrameReceived;
@@ -246,7 +267,7 @@ class POSEAILIVELINK_API UPoseAIMovementComponent : public UActorComponent
     }
 
 private:
-    FName subjectName;
+    FLiveLinkSubjectName subjectName;
     void InitializeObjects();
 
 };
@@ -277,87 +298,44 @@ public:
 
     FPoseAIHandshakeUpdate handshakeUpdate;
     FPoseAIConfigUpdate modelConfigUpdate;
-
+    FPoseAIDisconnect disconnect;
+    FPoseAIDisconnect closeSource;
 
     UFUNCTION(BlueprintCallable, Category = "PoseAI Events")
-    FName GetFirstUnboundSubject(bool excludeIdleSubjects = true);
+     FLiveLinkSubjectName GetFirstUnboundSubject(bool excludeIdleSubjects = true);
 
     UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
     FPoseAISubjectConnected subjectConnected;
 
+    // Connection driven events    
+    void BroadcastCloseSource(const FLiveLinkSubjectName& subjectName);
+    void BroadcastConfigUpdate(const FLiveLinkSubjectName& subjectName, FPoseAIModelConfig config);
+    void BroadcastDisconnect(const FLiveLinkSubjectName& subjectName);
+    void BroadcastFrameReceived(const FLiveLinkSubjectName& subjectName);
+    void BroadcastSubjectConnected(const FLiveLinkSubjectName& subjectName);
 
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAIFrameReceived frameReceived;
+    // Pose Camera driven events
+    void BroadcastArmpumps(const FLiveLinkSubjectName& subjectName, float stepHeight);
+    void BroadcastArmflexes(const FLiveLinkSubjectName& subjectName, float stepHeight, bool isExpanding);
+    void BroadcastArmjacks(const FLiveLinkSubjectName& subjectName, bool isRising);
+    void BroadcastArmGestureL(const FLiveLinkSubjectName& subjectName, int32 gesture);
+    void BroadcastArmGestureR(const FLiveLinkSubjectName& subjectName, int32 gesture);
+    void BroadcastCrouches(const FLiveLinkSubjectName& subjectName, bool isCrouching);
+    void BroadcastFootsteps(const FLiveLinkSubjectName& subjectName, float stepHeight, bool isLeftStep);
+    void BroadcastFeetsplits(const FLiveLinkSubjectName& subjectName, float stepHeight, bool isExpanding);
+    void BroadcastHandToZoneL(const FLiveLinkSubjectName& subjectName, int32 zone);
+    void BroadcastHandToZoneR(const FLiveLinkSubjectName& subjectName, int32 zone);
+    void BroadcastJumps(const FLiveLinkSubjectName& subjectName);
+    void BroadcastLiveValues(const FLiveLinkSubjectName& subjectName, FPoseAILiveValues values);
+    void BroadcastSidestepL(const FLiveLinkSubjectName& subjectName, bool isLeftStep);
+    void BroadcastSidestepR(const FLiveLinkSubjectName& subjectName, bool isLeftStep);   
+    void BroadcastStationary(const FLiveLinkSubjectName& subjectName);
+    void BroadcastVisibilityChange(const FLiveLinkSubjectName& subjectName, FPoseAIVisibilityFlags visibilityFlags);
 
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAIVisibilityChange visibilityChange;
-    
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAILiveValuesUpdate liveValues;
-    
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAIFootstepEvent footsteps;
-    
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAIFootsplitEvent footsplits;
-
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAISidestepEvent sidestepLeftFoot;
-
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAISidestepEvent sidestepRightFoot;
-
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAIArmpumpEvent armpumps;
-
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAIArmflexEvent armflexes;
-
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAIArmjackEvent armjacks;
-
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-        FPoseAIArmGestureEvent armGestureLeftOrDual;
-
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-        FPoseAIArmGestureEvent armGestureRight;
-
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAIJumpEvent jumps;
-
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAICrouchEvent crouches;
-
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAIHandToZoneEvent handToZoneL;
-
-    UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
-    FPoseAIHandToZoneEvent handToZoneR;
-
-    void BroadcastSubjectConnected(FName rigName);
-    void BroadcastConfigUpdate(FName rigName, FPoseAIModelConfig config);
-    void BroadcastFrameReceived(FName rigName);
-    void BroadcastVisibilityChange(FName rigName, FPoseAIVisibilityFlags visibilityFlags);
-    void BroadcastLiveValues(FName rigName, FPoseAILiveValues values);
-    void BroadcastFootsteps(FName rigName, float stepHeight, bool isLeftStep);
-    void BroadcastFeetsplits(FName rigName, float stepHeight, bool isExpanding);
-    void BroadcastSidestepL(FName rigName, bool isLeftStep);
-    void BroadcastSidestepR(FName rigName, bool isLeftStep);
-    void BroadcastArmpumps(FName rigName, float stepHeight);
-    void BroadcastArmflexes(FName rigName, float stepHeight, bool isExpanding);
-    void BroadcastArmjacks(FName rigName, bool isRising);
-    void BroadcastArmGestureL(FName rigName, int32 gesture);
-    void BroadcastArmGestureR(FName rigName, int32 gesture);
-    void BroadcastJumps(FName rigName);
-    void BroadcastCrouches(FName rigName, bool isCrouching);
-    void BroadcastHandToZoneL(FName rigName, int32 zone);
-    void BroadcastHandToZoneR(FName rigName, int32 zone);
-    void BroadcastStationary(FName rigName);
-    
-    bool RegisterComponentByName(UPoseAIMovementComponent* component, FName name, bool siezeIfTaken);
+    bool RegisterComponentByName(UPoseAIMovementComponent* component, const FLiveLinkSubjectName& name, bool siezeIfTaken);
     void RegisterComponentForFirstAvailableSubject(UPoseAIMovementComponent* component);
 
-    bool HasComponent(FName name, UPoseAIMovementComponent*& component);
+    bool HasComponent(const FLiveLinkSubjectName& name, UPoseAIMovementComponent*& component);
 
 
 private:
@@ -365,8 +343,8 @@ private:
     const double timeoutInSeconds = 60.0;
     TQueue<UPoseAIMovementComponent*> componentQueue;
     UPROPERTY()
-    TMap<FName, UPoseAIMovementComponent*> componentsByName;
-    TMap<FName, FDateTime> knownConnectionsWithTime;
+    TMap<FLiveLinkSubjectName, UPoseAIMovementComponent*> componentsByName;
+    TMap<FLiveLinkSubjectName, FDateTime> knownConnectionsWithTime;
     UPoseAIEventDispatcher() : UObject() {};
 };
 

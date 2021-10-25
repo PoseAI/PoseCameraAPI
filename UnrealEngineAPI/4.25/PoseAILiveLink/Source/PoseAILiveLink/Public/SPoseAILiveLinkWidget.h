@@ -21,8 +21,6 @@
 #include "PoseAIStructs.h"
 
 
-constexpr int32 POSEAI_DEFAULT_PORTNUM = 8080;
-
 /**
  *
  */
@@ -48,25 +46,26 @@ protected:
 
 private:
 	const static FString section;
-	static int32 portNumIPv4;
-	static int32 portNumIPv6;
+	static int32 portNum;
 	static int32 syncFPS;
 	static int32 cameraFPS;
 	static int32 modeIndex;
 	static int32 rigIndex;
 	static bool isMirrored;
 	static bool useRootMotion;
+	static bool isIPv6;
 
-	void UpdatePortIPv4(const FText& InText, ETextCommit::Type type);
-	void UpdatePortIPv6(const FText& InText, ETextCommit::Type type);
+
+	void UpdatePort(const FText& InText, ETextCommit::Type type);
 	void UpdateSyncFPS(const FText& InText, ETextCommit::Type type);
 	void UpdateCameraFPS(const FText& InText, ETextCommit::Type type);
-	bool ArePortsValid() const;
+	bool IsPortValid() const;
 
 	FReply OnOkClicked();
 	FReply OnToggleModeClicked();
 	FReply OnToggleRigClicked();
 
+	TWeakPtr<SCheckBox> ipv6CheckBox = nullptr;
 	TSharedPtr<SEditableTextBox> portInput = nullptr;
 	TSharedPtr<SEditableTextBox> syncFpsInput = nullptr;
 	TSharedPtr<SEditableTextBox> cameraFpsInput = nullptr;

@@ -3,47 +3,28 @@
 #include "PoseAILiveLinkServer.h"
 #include "PoseAIRig.h"
 #include "PoseAIEventDispatcher.h"
-#include "PoseAILiveLinkSource.h"
+#include "PoseAILiveLinkSingleSource.h"
 
 
 const FString PoseAILiveLinkServer::requiredMinVersion = FString(TEXT("0.8.24"));
 const FString PoseAILiveLinkServer::fieldPrettyName = FString(TEXT("userName"));
 const FString PoseAILiveLinkServer::fieldUUID = FString(TEXT("UUID"));
+const FString PoseAILiveLinkServer::fieldRigType = FString(TEXT("Rig"));
 const FString PoseAILiveLinkServer::fieldVersion = FString(TEXT("version"));
 
 
-
-TSharedPtr<FSocket> BuildUdpSocket(FString& description, FName protocolType, int32 port) {
+PoseAILiveLinkServer::PoseAILiveLinkServer(FPoseAIHandshake myHandshake, PoseAILiveLinkSingleSource* mySource, bool isIPv6, int32 portNum) :
+	source_(mySource), handshake(myHandshake),  port(portNum) {
+	protocolType = (isIPv6) ? FNetworkProtocolTypes::IPv6 : FNetworkProtocolTypes::IPv4;
 	
-	FName socketType = NAME_DGram;
-	FSocket* socket = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateSocket(socketType, description, protocolType);
-	socket->SetNonBlocking();
-	socket->SetReuseAddr();
-	int actualSize;
-	socket->SetReceiveBufferSize(64 * 1024, actualSize);
-	socket->SetSendBufferSize(64 * 1024, actualSize);
-
-	TSharedRef<FInternetAddr> sender = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateInternetAddr(protocolType);
-	sender->SetIp(0);
-	sender->SetPort(port);
-	socket->Bind(*sender);
-	return MakeShareable(socket);
-}
-
-
-void PoseAILiveLinkServer::CreateServer(int32 port, FPoseAIHandshake myHandshake, PoseAILiveLinkSource* mySource, TSharedRef< PoseAILiveLinkServer> serverRef) {
-	portNum = port;
-	source_ = mySource;
 	UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Creating Server"));
 	
 	FString serverName = "PoseAIServerSocketOnPort_" + FString::FromInt(port);
-	serverSocket = BuildUdpSocket(serverName, protocolType, port);
-	poseAILiveLinkRunnable = MakeShared<PoseAILiveLinkRunnable, ESPMode::ThreadSafe>(port, serverRef); 
 	FString senderName = "PoseAILiveLinkSenderOnPort_" + FString::FromInt(port);
+	serverSocket = BuildUdpSocket(serverName, protocolType, port);
+	poseAILiveLinkRunnable = MakeShared<PoseAILiveLinkReceiverRunnable, ESPMode::ThreadSafe>(port, this);
 	udpSocketSender = MakeShared<FPoseAISocketSender>(serverSocket, *senderName);
-	handshake = myHandshake;
-
-
+		
 	FString myIP;
 	if (protocolType == FNetworkProtocolTypes::IPv6) {
 		UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Created Server on IPv6 link-Local address (begins with fe80:) and Port:%d"), port);
@@ -74,9 +55,7 @@ void PoseAILiveLinkServer::CleanUp() {
 		cleaningUp = true;
 		CleanUpReceiver();
 		CleanUpSender();
-		//CleanUpSocket();
 	}	
-
 }
 
 void PoseAILiveLinkServer::CleanUpReceiver() {
@@ -84,7 +63,6 @@ void PoseAILiveLinkServer::CleanUpReceiver() {
 		UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Cleaning up socketReceiver"));
 		udpSocketReceiver->Stop();
 		udpSocketReceiver->Exit();
-		//udpSocketReceiver.Reset();
 	}
 
 	if (poseAILiveLinkRunnable != nullptr && poseAILiveLinkRunnable.IsValid()) {
@@ -98,87 +76,94 @@ void PoseAILiveLinkServer::CleanUpSender() {
 		UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Cleaning up socketSender"));
 		udpSocketSender->Stop(); 
 		udpSocketSender->Exit();
-		//udpSocketSender.Reset();
-
-	}
-
-}
-void PoseAILiveLinkServer::CleanUpSocket() {
-	if (serverSocket != nullptr && serverSocket.IsValid()) {
-		UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Cleaning up socket"));
-		serverSocket->Close();
-		//ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(serverSocket);
-		serverSocket = nullptr;
 	}
 }
 
-void PoseAILiveLinkServer::ReceiveUDPDelegate(const FString& recvMessage, const FPoseAIEndpoint& endpoint) {
-	if (cleaningUp)
-		return;
 
-	FString sessionID = endpoint.ToString();
+bool PoseAILiveLinkServer::HasValidConnection() const {
+	return endpoint.IsValid() && (FDateTime::Now() - lastConnection).GetTotalSeconds() < TIMEOUT_SECONDS;
+}
+
+void PoseAILiveLinkServer::ReceiveUDPDelegate(const FString& recvMessage, const FPoseAIEndpoint& endpointRecv) {
+	static const FGuid GUID_Error = FGuid();
+	if (cleaningUp) return;
+
 	TSharedPtr<FJsonObject> jsonObject = MakeShareable(new FJsonObject);
 	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(recvMessage);
-
-	static const FGuid GUID_Error = FGuid();
+	
 	if (!FJsonSerializer::Deserialize(Reader, jsonObject)) {
-		
 		static const FName NAME_JsonError = "PoseAILiveLink_JsonError";
-		FLiveLinkSubjectKey failKey = FLiveLinkSubjectKey(GUID_Error, FName(sessionID));
-		FLiveLinkLog::WarningOnce(NAME_JsonError, failKey, TEXT("PoseAI: failed to deserialize json object from %s"), *sessionID);
+		FLiveLinkSubjectKey failKey = FLiveLinkSubjectKey(GUID_Error, FName(endpointRecv.ToString()));
+		FLiveLinkLog::WarningOnce(NAME_JsonError, failKey, TEXT("PoseAI: failed to deserialize json object from %s"), *endpointRecv.ToString());
 		return;
 	}
-
-	if (!endpointFromSessionID.Contains(sessionID)) {
-		/* initialize new connection */
-		FString version;
-		if (!(jsonObject->TryGetStringField(fieldVersion, version))) {
-			static const FName NAME_NoAppVersion = "PoseAILiveLink_NoAppVersion";
-			FLiveLinkSubjectKey failKey = FLiveLinkSubjectKey(GUID_Error, FName(sessionID));
-			FLiveLinkLog::WarningOnce(NAME_NoAppVersion, failKey, TEXT("PoseAI: Incoming connection does not have a hello handshake"));
-			return;
-		} else if (!CheckAppVersion(version)) {
-			static const FName NAME_AppVersionFail = "PoseAILiveLink_AppVersionFail";
-			FLiveLinkSubjectKey failKey = FLiveLinkSubjectKey(GUID_Error, FName(sessionID));
-			FLiveLinkLog::WarningOnce(NAME_AppVersionFail, failKey, TEXT("PoseAI: Please update the mobile app to at least version %s"), *requiredMinVersion);
-			UE_LOG(LogTemp, Error, TEXT("PoseAILiveLink: Unknown app version.  Can not safely connect."), *version);
-			return;
+	bool sameAsCurrent = endpoint.IsValid() && (endpoint.ToString() == endpointRecv.ToString());
+	if (HasValidConnection() && !sameAsCurrent) {
+		if (ExtractConnectionName(jsonObject, endpointRecv) == source_->GetConnectionName(port)) {
+				endpoint = endpointRecv; //port has changed but IP and phone nmae same so just update endpoint
+				SendHandshake();
 		}
-
-		FName prettyName = ExtractPrettyName(jsonObject, endpoint);
-		UE_LOG(LogTemp, Display, TEXT("PoseAI: received new contact from %s on port %d"), *(prettyName.ToString()), endpoint.Port);
-		endpointFromSessionID.Emplace(sessionID, endpoint);
-		hasRegistered.Emplace(sessionID, false);
-
-		fnameFromSessionID.Emplace(sessionID, prettyName);
-		endpointFromFName.Emplace(prettyName, endpoint);
-		SendHandshake(endpoint);
-	} else if (!PoseAIRig::IsFrameData(jsonObject)){
-		SendHandshake(endpoint);
-	} else {
-		FName subjectName = fnameFromSessionID[sessionID];
-		if (!hasRegistered[sessionID]) {
-			hasRegistered[sessionID] = true;
-			UPoseAIEventDispatcher::GetDispatcher()->BroadcastSubjectConnected(subjectName);
+		else { //reject
+			UE_LOG(LogTemp, Display, TEXT("PoseAI: Ignoring contact from %s as already engaged."), *endpointRecv.ToString());
+			//consider sending rejected connection a warning message
 		}
-
 		
-		source_->UpdatePose(subjectName, jsonObject);
-		UPoseAIEventDispatcher::GetDispatcher()->BroadcastFrameReceived(subjectName);
 	}
-	
+	else if (!HasValidConnection() && !sameAsCurrent) { // new connection
+		InitiateConnection(jsonObject, endpointRecv);
+		
+	} 
+	else {
+		if (PoseAIRig::IsFrameData(jsonObject)) {
+			lastConnection = FDateTime::Now();
+			source_->UpdatePose(rig, jsonObject);
+			UPoseAIEventDispatcher::GetDispatcher()->BroadcastFrameReceived(source_->GetSubjectName());
+		}
+		else if (ExtractConnectionName(jsonObject, endpointRecv) == source_->GetConnectionName(port)) { //is likely a repeat hello message
+			SendHandshake();
+		}
+	}
 }
 
-bool PoseAILiveLinkServer::SendString(const FPoseAIEndpoint& endpoint, FString& message) const {
+void PoseAILiveLinkServer::InitiateConnection(TSharedPtr<FJsonObject> jsonObject, const FPoseAIEndpoint& endpointRecv) {
+	static const FGuid GUID_Error = FGuid();
+	FString version;
+	if (!(jsonObject->TryGetStringField(fieldVersion, version))) {
+		static const FName NAME_NoAppVersion = "PoseAILiveLink_NoAppVersion";
+		FLiveLinkSubjectKey failKey = FLiveLinkSubjectKey(GUID_Error, FName(endpointRecv.ToString()));
+		FLiveLinkLog::WarningOnce(NAME_NoAppVersion, failKey, TEXT("PoseAI: Incoming connection does not have a hello handshake"));
+		return;
+	}
+	else if (!CheckAppVersion(version)) {
+		static const FName NAME_AppVersionFail = "PoseAILiveLink_AppVersionFail";
+		FLiveLinkSubjectKey failKey = FLiveLinkSubjectKey(GUID_Error, FName(endpointRecv.ToString()));
+		FLiveLinkLog::WarningOnce(NAME_AppVersionFail, failKey, TEXT("PoseAI: Please update the mobile app to at least version %s"), *requiredMinVersion);
+		UE_LOG(LogTemp, Error, TEXT("PoseAILiveLink: Unknown app version.  Can not safely connect."), *version);
+		return;
+	}
+	FName connectionName = ExtractConnectionName(jsonObject, endpointRecv);
+	source_->SetConnectionName(connectionName);
+	endpoint = endpointRecv;
+	rig = PoseAIRig::PoseAIRigFactory(source_->GetSubjectName(), handshake);
+	hasNewRig = true;
+	SendHandshake();
+	UPoseAIEventDispatcher::GetDispatcher()->BroadcastSubjectConnected(source_->GetSubjectName());
+	lastConnection = FDateTime::Now();
+	UE_LOG(LogTemp, Display, TEXT("PoseAI: received new contact from %s on port %d"), *(connectionName.ToString()), endpointRecv.Port);
+}
+
+bool PoseAILiveLinkServer::SendString(FString& message) const {
+	if (!endpoint.IsValid())
+		return false;
 	FTCHARToUTF8 byteConvert(*message);
 	TSharedRef<TArray<uint8>, ESPMode::ThreadSafe> bytedata = MakeShared<TArray<uint8>, ESPMode::ThreadSafe>();
 	bytedata->Append((uint8*)byteConvert.Get(), byteConvert.Length());;
 	return udpSocketSender->Send(bytedata, endpoint);
 }
 
-void PoseAILiveLinkServer::SendHandshake(const FPoseAIEndpoint& endpoint) const {
+void PoseAILiveLinkServer::SendHandshake() const {
 	FString message_string = handshake.ToString();
-	if (SendString(endpoint, message_string)) {
+	if (SendString(message_string)) {
 		UE_LOG(LogTemp, Display, TEXT("PoseAI: Sent handshake %s to %s"), *message_string, *(endpoint.ToString()));
 	} else { //unsuccesful
 		static const FName NAME_HandshakeFail = "PoseAILiveLink_HandshakeFail";
@@ -190,56 +175,61 @@ void PoseAILiveLinkServer::SendHandshake(const FPoseAIEndpoint& endpoint) const 
 
 void PoseAILiveLinkServer::SetHandshake(const FPoseAIHandshake& newHandshake) {
 	bool dirty = handshake != newHandshake;
+	bool rigChange = handshake.rig != newHandshake.rig;
 	handshake = newHandshake;
-	if (dirty) {
-		TArray<FPoseAIEndpoint> endpoints;
-		endpointFromFName.GenerateValueArray(endpoints);
-		for (auto& endpoint : endpoints) SendHandshake(endpoint);
+	if (rigChange) {
+		rig = PoseAIRig::PoseAIRigFactory(source_->GetSubjectName(), handshake);
+		hasNewRig = true;
 	}
+	if (dirty && endpoint.IsValid()) 
+		SendHandshake();
 }
 
 
-void PoseAILiveLinkServer::SendConfig(FName target, FPoseAIModelConfig config) {
-	FPoseAIEndpoint* endpoint = endpointFromFName.Find(target);
-	FString message_string = config.ToString();
-	if (endpoint != nullptr) {
-		if (SendString(*endpoint, message_string))
-			UE_LOG(LogTemp, Display, TEXT("PoseAI: Sent config %s to %s"), *message_string, *(endpoint->ToString()));
+void PoseAILiveLinkServer::SendConfig(const FLiveLinkSubjectName& target, FPoseAIModelConfig config) {
+	if (target == source_->GetSubjectName()) {
+		FString message_string = config.ToString();
+		if (SendString(message_string))
+			UE_LOG(LogTemp, Display, TEXT("PoseAI: Sent config %s to %s"), *message_string, *endpoint.ToString());
 	}
 }
 
+void PoseAILiveLinkServer::CloseTarget(const FLiveLinkSubjectName& target) {
+	if (target == source_->GetSubjectName())
+		source_->RequestSourceShutdown();
+}
 
 
-void PoseAILiveLinkServer::Disconnect() const {
-	FTCHARToUTF8 byteConvert(*disconnect);
-	TSharedRef<TArray<uint8>, ESPMode::ThreadSafe> bytedata = MakeShared<TArray<uint8>, ESPMode::ThreadSafe>();
-	bytedata->Append((uint8*)byteConvert.Get(), byteConvert.Length());;
-	for (auto& endpoint : endpointFromSessionID) {
-		if (udpSocketSender->Send(bytedata, endpoint.Value)) {
-			UE_LOG(LogTemp, Display, TEXT("PoseAI: Sent disconnect request to %s"), *(endpoint.Value.ToString()));
+void PoseAILiveLinkServer::Disconnect()  {
+	if (endpoint.IsValid()) {
+		FTCHARToUTF8 byteConvert(*disconnect);
+		TSharedRef<TArray<uint8>, ESPMode::ThreadSafe> bytedata = MakeShared<TArray<uint8>, ESPMode::ThreadSafe>();
+		bytedata->Append((uint8*)byteConvert.Get(), byteConvert.Length());;
+		if (udpSocketSender->Send(bytedata, endpoint)) {
+			UE_LOG(LogTemp, Display, TEXT("PoseAI: Sent disconnect request to %s"), *(endpoint.ToString()));
 		}
 		else { //unsuccesful
-			UE_LOG(LogTemp, Display, TEXT("PoseAI: Unable to disconnect from %s"), *(endpoint.Value.ToString()));
+			UE_LOG(LogTemp, Display, TEXT("PoseAI: Unable to disconnect from %s"), *(endpoint.ToString()));
 		}
 	}
 }
 
+void PoseAILiveLinkServer::DisconnectTarget(const FLiveLinkSubjectName& target) {
+	if (target == source_->GetSubjectName())
+		Disconnect();
+}
 
-FName PoseAILiveLinkServer::ExtractPrettyName(TSharedPtr<FJsonObject> jsonObject, const FPoseAIEndpoint& endpoint) const
+FName PoseAILiveLinkServer::ExtractConnectionName(TSharedPtr<FJsonObject> jsonObject, const FPoseAIEndpoint& endpointRecv) const
 {
-	//consider using uuid field instead to ensure uniqueness, in case multiple users connect from same IP address
 	FString prettyString;
 	if (!(jsonObject->TryGetStringField(fieldPrettyName, prettyString))) {
 		prettyString = "Unknown";
 	}
-	return FName(*(prettyString.Append("@").Append(endpoint.Address->ToString(false))));
-	
-	
+	return FName(*(prettyString.Append("@").Append(endpointRecv.Address->ToString(false))));
 }
 
 bool PoseAILiveLinkServer::CheckAppVersion(FString version) const
 {
-	
 	UE_LOG(LogTemp, Display, TEXT("PoseAILiveLink: App version %s vs required version %s."), *version, *requiredMinVersion);
 	TArray<FString> appArray;
 	version.ParseIntoArray(appArray, TEXT("."), false);
