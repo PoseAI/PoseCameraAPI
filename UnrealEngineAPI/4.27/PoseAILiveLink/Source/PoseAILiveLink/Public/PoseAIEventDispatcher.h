@@ -110,7 +110,7 @@ private:
 
 class UPoseAIEventDispatcher;
 
-UCLASS(ClassGroup = (PoseAI))
+UCLASS(ClassGroup = (PoseAI), meta = (BlueprintSpawnableComponent))
 class POSEAILIVELINK_API UPoseAIMovementComponent : public UActorComponent
 {
     GENERATED_BODY()

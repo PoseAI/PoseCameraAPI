@@ -1,6 +1,7 @@
 // Copyright Pose AI Ltd 2021
 
 #include "PoseAILiveLinkServer.h"
+#include "Async/Async.h"
 #include "PoseAIRig.h"
 #include "PoseAIEventDispatcher.h"
 #include "PoseAILiveLinkSingleSource.h"
@@ -55,6 +56,14 @@ void PoseAILiveLinkServer::CleanUp() {
 		cleaningUp = true;
 		CleanUpReceiver();
 		CleanUpSender();
+		TSharedPtr<FSocket> socketForClosure = serverSocket;
+		uint32 portnum = port;
+		// using delayed closure to try to resolve issue where Epic built plugin creates crashes while project plugin doesn't.
+		Async(EAsyncExecution::Thread, [socketForClosure, portnum]() {
+			FPlatformProcess::Sleep(2.0);
+			socketForClosure->Close();
+			UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Closed socket on Port:%d"), portnum);
+			});		
 	}	
 }
 
@@ -62,7 +71,6 @@ void PoseAILiveLinkServer::CleanUpReceiver() {
 	if (udpSocketReceiver != nullptr && udpSocketReceiver.IsValid()) {
 		UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: Cleaning up socketReceiver"));
 		udpSocketReceiver->Stop();
-		udpSocketReceiver->Exit();
 	}
 
 	if (poseAILiveLinkRunnable != nullptr && poseAILiveLinkRunnable.IsValid()) {

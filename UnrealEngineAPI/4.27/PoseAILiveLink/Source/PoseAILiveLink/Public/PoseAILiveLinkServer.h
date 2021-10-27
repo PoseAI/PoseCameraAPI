@@ -100,6 +100,7 @@ private:
 	//split clean up routine by component
 	void CleanUpReceiver();
 	void CleanUpSender();
+	void CleanUpSocket();
 	bool cleaningUp = false;
 };
 
@@ -157,8 +158,7 @@ public:
 			}
 			
 		}
-		if (socket.IsValid())
-			socket->Close();
+		
 		thread = nullptr;
 		return 0;
 	}

@@ -127,9 +127,7 @@ void PoseAILiveLinkSingleSource::disable()
 {
 	UE_LOG(LogTemp, Display, TEXT("Pose AI LiveLink: disabling the source"));
 	status = LOCTEXT("statusDisabled", "disabled");
-	critSingleSection.Lock();
 	liveLinkClient = nullptr;
-	critSingleSection.Unlock();
 }
 
 

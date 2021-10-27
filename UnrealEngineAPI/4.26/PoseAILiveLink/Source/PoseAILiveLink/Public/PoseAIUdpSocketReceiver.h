@@ -129,8 +129,6 @@ public:
 	virtual void Stop() override
 	{
 		Stopping = true;
-		while (isUpdating)
-		{}
 	}
 
 	virtual void Exit() override { }
