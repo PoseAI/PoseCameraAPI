@@ -92,8 +92,12 @@ The base classes for parsing the JSON messages and communicating with Pose Camer
 * PoseAIRig.ModelLatency - time (in ms) between Pose Camera receiving the frame and sending the packet. Does not include network transmission time from phone to source.
 * PoseAIRig.Timestamp - timestamp from Pose Camera.
 
+#### PoseAIRigRetarget
+This is a utility that allows you to remap from one rig setup to one of our provided standard rig.  This can help you deal with limbs using a different rotation basis in the model.
+Follow the instructions in this file to generate a remapping in the editor for each unique rig.
 
-#### PoseAIConfig.
+
+#### PoseAIConfig
 Enums and a couple of constants.
  * STALE_TIME_IN_MS: normally once a connection is made to a source on a specific port, a second sender will not be allowed to connect with the same source.  If the current connection is silent for this “timeout”, a second sender will be allowed to take over the connection to that source.
 #### PoseAIRigUnity, PoseAIRigUE4 and PoseAIRigMixamo

@@ -37,8 +37,8 @@ namespace PoseAI
             public int cameraFPS;
 
             // name of app and signature for licensee connections
-            public string whoami = "Your app name";
-            public string signature = "Your signature";
+            public string whoami = "Your App Name";
+            public string signature = "Your App Signature";
 
             // 0 for verbose JSON, 1 for more compact packets.
             public int packetFormat = 1;
@@ -163,6 +163,9 @@ namespace PoseAI
             HumanBodyBones.RightThumbDistal
         };
 
+        public static readonly List<int> parentIndices = new List<int> {
+        0,0,1,2,3,0,5,6,7,0,9,10,11,12,11,14,15,11,17,18,16,0,20,22,23,20,25,26,20,28,29,20,31,32,20,34,35,19,0,37,39,40,37,42,43,37,45,46,37,48,49,37,51,52,
+        };
 
         protected internal List<List<float>> rotationData;
         protected internal List<string> rotationNames;

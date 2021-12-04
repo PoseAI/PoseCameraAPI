@@ -32,14 +32,20 @@ namespace PoseAI
         [Tooltip("Use only if rig has a prefix before all bone names (i.e. mixamorig1: if the root is at mixamorig1:Hips)")]
         public string JointNamePrefix = "";
 
+        [Tooltip("Use to override the default rootname if the rig has a different root than standard")]
+        public string OverrideRootName = "";
+
+        [Tooltip("Use only if rig has a prefix before all bone names (i.e. mixamorig1: if the root is at mixamorig1:Hips)")]
+        public string Remapping = "";
+
         private Animator _animator;
         private PoseAISource _source;
         private Transform _rootJoint;
         private Vector3 _smoothedRootTranslation = Vector3.zero; 
         private float idleAlpha = 1.0f;
         private List<String> _jointNames = new List<String>();
-        private List<int> _parentIndices = new List<int>();
- 
+        private List<Quaternion> _remapping = null;
+
         private PoseAIRigBase _rigObj;
 
         public void SetSource(PoseAISource source)
@@ -48,12 +54,10 @@ namespace PoseAI
             if (_source != null)
             {
                 _rigObj = source.GetRig();
-                string rootName = JointNamePrefix + _rigObj.GetRootName();
+                string rootName = OverrideRootName != "" ? OverrideRootName : JointNamePrefix + _rigObj.GetRootName()  ;
                 _rootJoint = FindJointTransformRecursive(transform, rootName, skipToChildren: true);
                 if (_rootJoint == null)
-                    Debug.Log("Did not find rootjoint in " + transform.name);
-                else
-                    MatchJointNamesWithTransforms();
+                    Debug.Log("Did not find rootjoint in " + transform.name + ".  Try overriding with correct name in editor.");
             }
         }
 
@@ -62,6 +66,16 @@ namespace PoseAI
             SetSource(GetComponent<PoseAISource>());
             if (_source == null)
                 Debug.Log("Missing source for PoseAI CharacterAnimator in "  + transform.root.gameObject.name.ToString());
+
+            if (Remapping != "")
+            {
+                if (PoseAIRigRetarget.Remappings.ContainsKey(Remapping)){
+                    Debug.Log("Remapped " + _animator.name + " with " + Remapping);
+                    _remapping = PoseAIRigRetarget.Remappings[Remapping];
+                } else {
+                    Debug.Log("Could not find an existing remapping named " + Remapping);
+                }
+            }
         }
                
         void OnAnimatorIK()
@@ -80,17 +94,32 @@ namespace PoseAI
                      startAt = 9;
                 } else
                 {
-                    SetBone(bones[0], _rigObj.GetBaseRotation() * rotations[0], useAlpha);
+                    if (_remapping != null)
+                    {
+                        SetBone(bones[0], _rigObj.GetBaseRotation() * rotations[0] * _remapping[0], useAlpha);
+                    }
+                    else
+                    {
+                        SetBone(bones[0], _rigObj.GetBaseRotation() * rotations[0], useAlpha);
+                    }
                     startAt = 1;
                 }
+               
                 for (int j = startAt; j < rotations.Count; ++j)
                 {
-                    var p = _parentIndices[j];
+                    var p = PoseAIRigBase.parentIndices[j];
                     var bone = bones[j];
                     if (bone != HumanBodyBones.LastBone && validity[j] && validity[p])
                     {
-                        SetBone(bone, Quaternion.Inverse(rotations[p]) * rotations[j], useAlpha);
-                    }
+                        if (_remapping != null)
+                        {
+                            SetBone(bone, Quaternion.Inverse(rotations[p] * _remapping[p]) * rotations[j] * _remapping[j], useAlpha);
+                        } else
+                        {
+                            SetBone(bone, Quaternion.Inverse(rotations[p]) * rotations[j], useAlpha);
+                        }
+                        
+                    } 
                 }
             } 
         }
@@ -121,7 +150,7 @@ namespace PoseAI
         }
 
         private void SetBone(HumanBodyBones bone, Quaternion target, float alpha)
-        {
+        {         
             if (alpha < 1.0f)
                 target = Quaternion.Slerp(_animator.GetBoneTransform(bone).localRotation, target, alpha);
             _animator.SetBoneLocalRotation(bone, target);
@@ -178,31 +207,6 @@ namespace PoseAI
             return componentY - minY;
         }
 
-        
-
-        /* DEPR warning: the next few functions date from when we directly modified transforms rather than using Mecanim.  We could instead specify parents directly from HumanBodyBones and retire these functions,
-        *  although this method handles case where a simpler skeleton is missing some joints, so we will leave it for now.
-        */
-        private void MatchJointNamesWithTransforms()
-        {
-            if (JointNamePrefix == "")
-                _jointNames = _rigObj.GetJointNames();
-            else
-            {
-                _jointNames.Clear();
-                foreach (string name in _rigObj.GetJointNames())
-                {
-                    _jointNames.Add(JointNamePrefix + name);
-                }
-            }
-            _parentIndices.Clear();
-            foreach (string name in _jointNames)
-            {
-                var t = FindJointTransformRecursive(_rootJoint, name);
-                _parentIndices.Add(FindParentIndexRecursive(t));
-            }
-        }
-
         private static Transform FindJointTransformRecursive(Transform parent, string name, bool skipToChildren = false)
         {
             if (!skipToChildren && string.Equals(parent.name, name, StringComparison.InvariantCultureIgnoreCase))
@@ -219,12 +223,5 @@ namespace PoseAI
             return null;
         }
 
-        private int FindParentIndexRecursive(Transform child)
-        {
-            if (child == null || child.parent == null)
-                return 0;
-            int parentIndex = _jointNames.IndexOf(child.parent.name);
-            return (parentIndex > -1) ? parentIndex : FindParentIndexRecursive(child.parent);
-        }
     }
 }
