@@ -68,5 +68,68 @@ namespace PoseAI
         }
     }
 
+    public class UITouch
+    {
+        public int index = 0;
+        public float x = 0.0f;
+        public float y = 0.0f;
+        public TouchState state = TouchState.Ended;
+
+        public override string ToString()
+        {
+            return "Touch_" + index + ":[" + x.ToString("0.000")  + "," + y.ToString("0.000") + "] " + state;
+        }
+
+
+        public static void DecodeMultiTouchString(ref string data, ref Queue<UITouch> touchQueue)
+        {
+            for (int i = 0; i < data.Length; i += 5)
+            {
+                UITouch touch = new UITouch() { index = data[i] - '0'};
+                if (data[i + 1] == '=' && data[i + 2] == '=')
+                    touch.state = TouchState.Ended;
+                else if (data[i + 1] == '=' && data[i + 2] == '0')
+                    touch.state = TouchState.Cancelled;
+                else
+                {
+                    touch.x = PoseAI_Decoder.FixedB64pairToFloat(data[i + 1], data[i + 2]);
+                    touch.y = PoseAI_Decoder.FixedB64pairToFloat(data[i + 3], data[i + 4]);
+                    touch.state = TouchState.Touching;
+                }
+                touchQueue.Enqueue(touch);
+            }
+                
+        }
+
+        public static void DecodeMultiTouchStateString(ref string data, ref List<UITouch> touchArray)
+        {            
+            for (int i = 0; i < data.Length; i += 4)
+            {
+                int idx = i / 4;
+                touchArray[idx].index = idx;
+                if (data[i] == '=' && data[i + 1] == '=')
+                    touchArray[idx].state = TouchState.Ended;
+                else if (data[i + 1] == '=' && data[i + 2] == '0')
+                    touchArray[idx].state = TouchState.Cancelled;
+                else
+                {
+                    touchArray[idx].x = PoseAI_Decoder.FixedB64pairToFloat(data[i], data[i + 1]);
+                    touchArray[idx].y = PoseAI_Decoder.FixedB64pairToFloat(data[i + 2], data[i + 3]);
+                    if (touchArray[idx].state == TouchState.Touching || touchArray[idx].state == TouchState.Begun)
+                         touchArray[idx].state = TouchState.Touching;
+                    else
+                        touchArray[idx].state = TouchState.Begun;
+                }
+            }
+
+        }
+
+        public static List<UITouch> MakeList(int number) {
+            var retValue = new List<UITouch>(number);
+            for (int i = 0; i < number; ++i)
+                retValue.Add(new UITouch() { index = i }) ;
+            return retValue;
+        }
+    }
 }
 

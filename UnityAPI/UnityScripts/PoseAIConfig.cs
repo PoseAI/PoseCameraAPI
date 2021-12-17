@@ -20,6 +20,7 @@ namespace PoseAI
     public enum PoseAI_Gestures {None,
         Swipe1, Swipe2, Swipe3, Swipe4, Swipe6, Swipe7, Swipe8, Swipe9,
         FlapLateral, Flap, WaxOn, WaxOff, OverheadClapSmall, OverheadClap, ReverseOverheadClap};
+    public enum TouchState { Begun, Touching, Ended, Cancelled};
     public static class PoseAI_Methods
     {
 

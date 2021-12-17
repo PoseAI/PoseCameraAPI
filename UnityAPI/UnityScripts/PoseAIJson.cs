@@ -90,8 +90,10 @@ namespace PoseAI
         public int PF;
 
         //receives compact touch updates from app, and adds them as vector 2s to Queue for game logic processing.  Values are relative to phone not user (use orientation to rotate as appropriate)
+        public string TouchState = "";
         public string Touches = "";
-        public Queue<Vector2?> touchQueue = new Queue<Vector2?>();
+        public Queue<UITouch> touchQueue = new Queue<UITouch>();
+        public List<UITouch> touchStates = UITouch.MakeList(10);
         //if touches are enabled, sends current device orientation. For iOS this is the UIDeviceOrientation enum
         public int Orientation;
 
@@ -336,28 +338,15 @@ namespace PoseAI
         private void ProcessTouches()
         {
             if (Touches.Length > 1) {
-                List<float?> flatArray = new List<float?>(Touches.Length / 2);
-                PoseAI_Decoder.FStringFixed12ToFloat(ref Touches, ref flatArray);
-
                 // safety valve which clears the queue at a certain size, in case the program is not processing touches
-                if (touchQueue.Count > PoseAIConfig.MAX_SIZE_TOUCH_QUEUE  + flatArray.Count / 2)
+                if (touchQueue.Count > PoseAIConfig.MAX_SIZE_TOUCH_QUEUE)
                     touchQueue.Clear();
-
-                for (int i = 0; i < flatArray.Count; i += 2)
-                {
-                    float? x = flatArray[i];
-                    float? y = flatArray[i + 1];
-                    if(x!=null && y!=null)
-                        touchQueue.Enqueue(new Vector2(x.Value, y.Value));
-                    else
-                        touchQueue.Enqueue(null);
-
-                }
-                    
+                UITouch.DecodeMultiTouchString(ref Touches, ref touchQueue);
+                Touches = "";
             }
-            Touches = "";
-            
-            
+
+            if (TouchState.Length > 0)
+                UITouch.DecodeMultiTouchStateString(ref TouchState, ref touchStates);
         }
 
         // convenience routine to get rotation field names and pointers into lists.
@@ -673,5 +662,7 @@ namespace PoseAI
             PointScreen[1] = PoseAI_Decoder.FixedB64pairToFloat(compactString[2], compactString[3]);
         }
     }
+
+
 
 }
