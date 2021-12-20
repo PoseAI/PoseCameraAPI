@@ -10,13 +10,7 @@ namespace PoseAI
 {
     /*
      * This class holds remappings between rigs allowing retargetting for the PoseAI animation controller to a rig with arbitrary joint rotation configuration.   The class also
-     * acts as a utility component to calculate the required retargetting between two rigs, and you can cut and paste the result into the definition below.
-     * 1. set both rigs as Humanoid Avatars and add Animation components to both. 
-     * 2. set rigs to be in same position with same world orientation when Play begins (ideally T-Pose although using Mecanim animation retargetting for both may also work if they have the same pose) 
-     * 3. add this component in the editor to the arbitrary rig, set Animator to the standard rig (i.e. a Unity or Mixamo rig that works with PoseAI).
-     * 4. play in editor and at start the mapping will be written to console.  Copy and paste the text into the static Remappings dictionary in this class.  Change the default generated key if desired (rigname1_rig2)
-     * 5. you can remove or disable the component from the arbitrary rig.
-     * 6. in the PoseAIAnimationComponent or the arbitrary rig, set the remapping field in the editor to the key for this remapping.  It should now remap animations correctly.
+     * acts as a utility component to calculate the required retargetting between two rigs, and you can cut and paste the result into the definition below.  See our documentation for a walkthrough.
      */
 
 
