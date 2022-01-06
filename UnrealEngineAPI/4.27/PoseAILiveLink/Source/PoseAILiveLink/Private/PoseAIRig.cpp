@@ -280,10 +280,6 @@ bool PoseAIRig::ProcessCompactRotations(const TSharedPtr<FJsonObject> jsonObject
 			TArray<FQuat> quatArray;
 			FStringFixed12ToFloat(rotaBody, flatArray);
 			FlatArrayToQuats(flatArray, quatArray);
-			if (isDesktop) {
-				const FQuat identity = FQuat::Identity;
-				quatArray.InsertDefaulted(1, lowerBodyNumOfJoints);
-			}
 			AppendQuatArray(quatArray, 1, componentRotations, data); //start at 1 as psoe camera does not include the root joint
 		}
 		else

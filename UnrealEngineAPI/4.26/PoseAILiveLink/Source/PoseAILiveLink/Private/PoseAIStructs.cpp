@@ -132,6 +132,7 @@ void FPoseAIEventStruct::ProcessCompactBody(const FString& compactString) {
 }
 
 void  FPoseAIVisibilityFlags::ProcessCompact(const FString& visString) {
+    hasChanged = false;
     SetAndCheckForChange(visString[0] != '0', isTorso, hasChanged);
     SetAndCheckForChange(visString[1] != '0', isLeftLeg, hasChanged);
     SetAndCheckForChange(visString[2] != '0', isRightLeg, hasChanged);
