@@ -264,7 +264,7 @@ bool PoseAIRig::ProcessCompactRotations(const TSharedPtr<FJsonObject> jsonObject
 
 	bool hasProcessedRotations;
 
-	if ((rotaBody.Len() < 8 && cachedPose.Num() < 1) ) {//|| !visibilityFlags.isTorso
+	if ((rotaBody.Len() < 8 && cachedPose.Num() < 1) ) {
 		hasProcessedRotations = false;
 	}
 	else if (rotaBody.Len() < 8 ) {
@@ -285,25 +285,26 @@ bool PoseAIRig::ProcessCompactRotations(const TSharedPtr<FJsonObject> jsonObject
 		else
 			AppendCachedRotations(1, numBodyJoints, componentRotations, data);
 		
-
-		if (rotaHandLeft.Len() > 7) {
-			TArray<float> flatArray;
-			TArray<FQuat> quatArray;
-			FStringFixed12ToFloat(rotaHandLeft, flatArray);
-			FlatArrayToQuats(flatArray, quatArray);
-			AppendQuatArray(quatArray, numBodyJoints, componentRotations, data);
+		if (includeHands) {
+			if (rotaHandLeft.Len() > 7) {
+				TArray<float> flatArray;
+				TArray<FQuat> quatArray;
+				FStringFixed12ToFloat(rotaHandLeft, flatArray);
+				FlatArrayToQuats(flatArray, quatArray);
+				AppendQuatArray(quatArray, numBodyJoints, componentRotations, data);
+			}
+			else
+				AppendCachedRotations(numBodyJoints, numBodyJoints + numHandJoints, componentRotations, data);
+			if (rotaHandRight.Len() > 7) {
+				TArray<float> flatArray;
+				TArray<FQuat> quatArray;
+				FStringFixed12ToFloat(rotaHandRight, flatArray);
+				FlatArrayToQuats(flatArray, quatArray);
+				AppendQuatArray(quatArray, numBodyJoints + numHandJoints, componentRotations, data);
+			}
+			else
+				AppendCachedRotations(numBodyJoints + numHandJoints, numBodyJoints + 2 * numHandJoints, componentRotations, data);
 		}
-		else
-			AppendCachedRotations(numBodyJoints, numBodyJoints + numHandJoints, componentRotations, data);
-		if (rotaHandRight.Len() > 7) {
-			TArray<float> flatArray;
-			TArray<FQuat> quatArray;
-			FStringFixed12ToFloat(rotaHandRight, flatArray);
-			FlatArrayToQuats(flatArray, quatArray);
-			AppendQuatArray(quatArray, numBodyJoints + numHandJoints, componentRotations, data);
-		}
-		else
-			AppendCachedRotations(numBodyJoints + numHandJoints, numBodyJoints + 2 * numHandJoints, componentRotations, data);
 		AssignCharacterMotion(data);
 		CachePose(data.Transforms);
 		hasProcessedRotations = true;

@@ -12,7 +12,7 @@
 	"SupportURL": "support@pose-ai.com",
 	"EngineVersion": "4.25.0",
 	"CanContainContent": false,
-	"IsBetaVersion": true,
+	"IsBetaVersion": false,
 	"IsExperimentalVersion": false,
 	"Installed": false,
 	"Modules": [
