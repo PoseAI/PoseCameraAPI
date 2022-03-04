@@ -37,14 +37,14 @@ namespace PoseAI
         public static void FStringFixed12ToFloat(ref string data, ref List<float> flatArray)
         {
             flatArray.Capacity = flatArray.Count + data.Length / 2;
-            for (int i = 0; i < data.Length; i += 2)
+            for (int i = 0; i < data.Length - 1; i += 2)
                 flatArray.Add(FixedB64pairToFloat(data[i], data[i + 1]));
         }
 
         public static void FStringFixed12ToFloat(ref string data, ref List<float?> flatArray)
         {
             flatArray.Capacity = flatArray.Count + data.Length / 2;
-            for (int i = 0; i < data.Length; i += 2)
+            for (int i = 0; i < data.Length - 1; i += 2)
             {
                 if(data[i]=='=' && data[i+1]=='=')
                     flatArray.Add(null);
@@ -57,7 +57,7 @@ namespace PoseAI
         public static void FlatArrayToQuats(ref List<float> flatArray, ref List<Quaternion> quatArray)
         {
             quatArray.Capacity = quatArray.Count + flatArray.Count / 4;
-            for (int i = 0; i < flatArray.Count; i += 4)
+            for (int i = 0; i < flatArray.Count - 3; i += 4)
             {
                 //reordered Quats for Unity coordinate system.
                 var quat = new Quaternion(flatArray[i + 1], -flatArray[i], flatArray[i + 3], -flatArray[i + 2]);
@@ -83,7 +83,7 @@ namespace PoseAI
 
         public static void DecodeMultiTouchString(ref string data, ref Queue<UITouch> touchQueue)
         {
-            for (int i = 0; i < data.Length; i += 5)
+            for (int i = 0; i < data.Length - 4; i += 5)
             {
                 UITouch touch = new UITouch() { index = data[i] - '0'};
                 if (data[i + 1] == '=' && data[i + 2] == '=')
@@ -103,7 +103,7 @@ namespace PoseAI
 
         public static void DecodeMultiTouchStateString(ref string data, ref List<UITouch> touchArray)
         {            
-            for (int i = 0; i < data.Length; i += 4)
+            for (int i = 0; i < data.Length - 3; i += 4)
             {
                 int idx = i / 4;
                 touchArray[idx].index = idx;
