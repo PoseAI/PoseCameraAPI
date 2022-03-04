@@ -1,8 +1,8 @@
 # Version revision log
-PoseAI Engine framework for iOS includes delegates to help integrate the engine into licensee apps.  Below we describe each.  
+
 
 ## Pose Camera 1.1 and PoseAI Engine Framework 1.1
-Released March 2022.
+Released March 2022. [Note Pose Camera update is still going through Apple process. We expect public release during week of March 7th]
 
 #### Updated AI and smoothing
 We have added our Version 2 AI model for mobile.  This model should be more accurate in most situations than our V1 model
