@@ -31,7 +31,6 @@ namespace PoseAI
             public string name = "Unity Demo";
             public string rig;
             public string mode;
-            public string context = "Default";
             public string mirror;
             public int syncFPS;
             public int cameraFPS;
@@ -42,6 +41,9 @@ namespace PoseAI
 
             // 0 for verbose JSON, 1 for more compact packets.
             public int packetFormat = 1;
+
+            //this is the version of our AI.  version 1 is our original model during beta and release.  version 2 was released in March 2022 and is currently the default.  
+            public int modelVersion = 2;
         }
         public Handshake HANDSHAKE = new Handshake();
 

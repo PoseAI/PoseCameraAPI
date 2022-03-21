@@ -35,7 +35,7 @@ namespace PoseAI
         [Tooltip("Use to override the default rootname if the rig has a different root than standard")]
         public string OverrideRootName = "";
 
-        [Tooltip("Use only if rig has a prefix before all bone names (i.e. mixamorig1: if the root is at mixamorig1:Hips)")]
+        [Tooltip("Use only if you have set up a custom joint-by-joint remapping array (for non-standard rig configurations)")]
         public string Remapping = "";
 
         private Animator _animator;
@@ -61,21 +61,29 @@ namespace PoseAI
             }
         }
 
+        public void SetRemapping(string remapping)
+        {
+            Remapping = remapping;
+            if (Remapping != "")
+            {
+                if (PoseAIRigRetarget.Remappings.ContainsKey(Remapping))
+                {
+                    Debug.Log("Remapped " + _animator.name + " with " + Remapping);
+                    _remapping = PoseAIRigRetarget.Remappings[Remapping];
+                }
+                else
+                {
+                    Debug.Log("Could not find an existing remapping named " + Remapping);
+                }
+            }
+        }
+
         private void Start(){
             _animator = GetComponent<Animator>();
             SetSource(GetComponent<PoseAISource>());
             if (_source == null)
                 Debug.Log("Missing source for PoseAI CharacterAnimator in "  + transform.root.gameObject.name.ToString());
-
-            if (Remapping != "")
-            {
-                if (PoseAIRigRetarget.Remappings.ContainsKey(Remapping)){
-                    Debug.Log("Remapped " + _animator.name + " with " + Remapping);
-                    _remapping = PoseAIRigRetarget.Remappings[Remapping];
-                } else {
-                    Debug.Log("Could not find an existing remapping named " + Remapping);
-                }
-            }
+            SetRemapping(Remapping);
         }
                
         void OnAnimatorIK()
