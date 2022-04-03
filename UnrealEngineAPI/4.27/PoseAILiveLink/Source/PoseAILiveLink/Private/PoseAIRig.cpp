@@ -39,7 +39,10 @@ TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> PoseAIRig::PoseAIRigFactory(const FLi
 		rigPtr = MakeShared<PoseAIRigMixamo, ESPMode::ThreadSafe>(name, handshake);
 	}
 	else if (rigType == FName("MetaHuman")) {
-		rigPtr = MakeShared<PoseAIRigMetaHuman, ESPMode::ThreadSafe>(name, handshake);
+		rigPtr = MakeShared<PoseAIRigMetaHuman, ESPMode::ThreadSafe>(name, handshake);  
+	}
+	else if (rigType == FName("DazUE")) {
+		rigPtr = MakeShared<PoseAIRigDazUE, ESPMode::ThreadSafe>(name, handshake);  
 	}
 	else {
 		rigPtr = MakeShared<PoseAIRigUE4, ESPMode::ThreadSafe>(name, handshake);;
@@ -697,3 +700,100 @@ void PoseAIRigMetaHuman::Configure()
 	rigHeight = 168.0f;
 	rig = MakeStaticData();
 }
+
+void PoseAIRigDazUE::Configure()
+{
+	
+	jointNames.Empty();
+	boneVectors.Empty();
+	parentIndices.Empty();
+
+	AddBone(TEXT("root"), TEXT("root"), FVector(0.0, 0, 0.0));
+	AddBoneToLast(TEXT("hip"), FVector(0.0, -105.0, 0.0));
+	AddBoneToLast(TEXT("pelvis"), FVector(0.0, -1.8, 0.0));
+
+	AddBone(TEXT("rThighBend"), TEXT("pelvis"), FVector(-7.9, 10.6, -1.5));
+	AddBoneToLast(TEXT("rThighTwist"), FVector(0.0, 21, 0));
+	AddBoneToLast(TEXT("rShin"), FVector(0.0, 25.3, -1.2));
+	AddBoneToLast(TEXT("rFoot"), FVector(0.0, 42.8, 1));
+	AddBoneToLast(TEXT("rToe"), FVector(0.0, 0, 14.0));
+
+	AddBone(TEXT("lThighBend"), TEXT("pelvis"), FVector(7.9, 10.6, -1.5));
+	AddBoneToLast(TEXT("lThighTwist"), FVector(0.0, 21, 0));
+	AddBoneToLast(TEXT("lShin"), FVector(0.0, 25.3, -1.2));
+	AddBoneToLast(TEXT("lFoot"), FVector(0.0, 42.8, 1));
+	AddBoneToLast(TEXT("lToe"), FVector(0.0, 0.0, 14.0));
+
+	AddBone(TEXT("abdomenLower"), TEXT("hip"), FVector(0.0, -1.7, -1.5));
+	AddBoneToLast(TEXT("abdomenUpper"), FVector(0.0, -8.2, 1.2));
+	AddBoneToLast(TEXT("chestLower"), FVector(0.0, -7.9, -0.4));
+	AddBoneToLast(TEXT("chestUpper"), FVector(0.0, -13.1, -3.6));
+	AddBoneToLast(TEXT("neckLower"), FVector(0.0, -18.3, -1.5));
+	AddBoneToLast(TEXT("neckUpper"), FVector(0.0, -3.5, 1.5));
+	AddBoneToLast(TEXT("head"), FVector(0.0, -4.9, -0.5));
+
+	AddBone(TEXT("lCollar"), TEXT("chestUpper"), FVector(3.5, -10.9, -1.6));
+	AddBoneToLast(TEXT("lShldrBend"), FVector(11.9, 1.7, 0));
+	AddBoneToLast(TEXT("lShldrTwist"), FVector(11.6, 0, 0));
+	AddBoneToLast(TEXT("lForearmBend"), FVector(14.4, -0.2, -0.5));
+
+	AddBone(TEXT("rCollar"), TEXT("chestUpper"), FVector(-3.5, -10.9, -1.6));
+	AddBoneToLast(TEXT("rShldrBend"), FVector(-11.9, 1.7, 0));
+	AddBoneToLast(TEXT("rShldrTwist"), FVector(-11.6, 0, 0));
+	AddBoneToLast(TEXT("rForearmBend"), FVector(-14.4, -0.2, -0.5));
+
+	numBodyJoints = jointNames.Num();
+	if (includeHands) {
+		AddBone(TEXT("lForearmTwist"), TEXT("lForearmBend"), FVector(12.1, 0, 0));
+		AddBone(TEXT("lHand"), TEXT("lForearmTwist"), FVector(14.2, 0, -0.3));
+
+		AddBone(TEXT("lCarpal1"), TEXT("lHand"), FVector(0.4, -0.4, 1.1));
+		AddBoneToLast(TEXT("lIndex1"), FVector(7.6, -0.2, 0.1));
+		AddBoneToLast(TEXT("lIndex2"), FVector(3.9, 0, 0));
+		AddBoneToLast(TEXT("lIndex3"), FVector(2.1, 0, 0));
+		AddBone(TEXT("lCarpal2"), TEXT("lHand"), FVector(0.7, -0.4, 0.2));
+		AddBoneToLast(TEXT("lMid1"), FVector(7.5, -0.3, 0));
+		AddBoneToLast(TEXT("lMid2"), FVector(4.3, 0, 0));
+		AddBoneToLast(TEXT("lMid3"), FVector(2.5, 0, 0));
+		AddBone(TEXT("lCarpal3"), TEXT("lHand"), FVector(0.8, -0.4, -0.8));
+		AddBoneToLast(TEXT("lRing1"), FVector(6.9, -0.2, 0.0));
+		AddBoneToLast(TEXT("lRing2"), FVector(4.0, 0, 0));
+		AddBoneToLast(TEXT("lRing3"), FVector(2.2, 0, 0));
+		AddBone(TEXT("lCarpal4"), TEXT("lHand"), FVector(0.7, -0.4, 1.7));
+		AddBoneToLast(TEXT("lPinky1"), FVector(6.5, 0.2, 0));
+		AddBoneToLast(TEXT("lPinky2"), FVector(2.8, 0, 0));
+		AddBoneToLast(TEXT("lPinky3"), FVector(1.7, 0, 0));
+		AddBone(TEXT("lThumb1"), TEXT("lHand"), FVector(1.4, 0.7, 1.6));
+		AddBoneToLast(TEXT("lThumb2"), FVector(4.1, 0, 0));
+		AddBoneToLast(TEXT("lThumb3"), FVector(3.0, 0, 0));
+
+		AddBone(TEXT("rForearmTwist"), TEXT("rForearmBend"), FVector(-12.1, 0, 0));
+		AddBone(TEXT("rHand"), TEXT("rForearmTwist"), FVector(-14.2, 0, -0.3));
+
+		AddBone(TEXT("rCarpal1"), TEXT("rHand"), FVector(-0.4, -0.4, 1.1));
+		AddBoneToLast(TEXT("rIndex1"), FVector(-7.6, -0.2, 0.1));
+		AddBoneToLast(TEXT("rIndex2"), FVector(-3.9, 0, 0));
+		AddBoneToLast(TEXT("rIndex3"), FVector(-2.1, 0, 0));
+		AddBone(TEXT("rCarpal2"), TEXT("rHand"), FVector(0.7, -0.4, 0.2));
+		AddBoneToLast(TEXT("rMid1"), FVector(-7.5, -0.3, 0));
+		AddBoneToLast(TEXT("rMid2"), FVector(-4.3, 0, 0));
+		AddBoneToLast(TEXT("rMid3"), FVector(-2.5, 0, 0));
+		AddBone(TEXT("rCarpal3"), TEXT("rHand"), FVector(-0.8, -0.4, 0.8));
+		AddBoneToLast(TEXT("rRing1"), FVector(-6.9, -0.2, 0));
+		AddBoneToLast(TEXT("rRing2"), FVector(-4.0, 0, 0));
+		AddBoneToLast(TEXT("rRing3"), FVector(-2.2, 0, 0));
+		AddBone(TEXT("rCarpal4"), TEXT("rHand"), FVector(-0.7, -0.4, 1.7));
+		AddBoneToLast(TEXT("rPinky1"), FVector(-6.5, 0.2, 0));
+		AddBoneToLast(TEXT("rPinky2"), FVector(-2.8, 0, 0));
+		AddBoneToLast(TEXT("rPinky3"), FVector(-1.7, 0, 0));
+		AddBone(TEXT("rThumb1"), TEXT("rHand"), FVector(-1.4, 0.7, 1.6));
+		AddBoneToLast(TEXT("rThumb2"), FVector(-4.1, 0, 0));
+		AddBoneToLast(TEXT("rThumb3"), FVector(-3.0, 0, 0));
+	}
+	numHandJoints = (jointNames.Num() - numBodyJoints) / 2;
+	rigHeight = 168.0f;
+	rig = MakeStaticData();
+}
+
+
+

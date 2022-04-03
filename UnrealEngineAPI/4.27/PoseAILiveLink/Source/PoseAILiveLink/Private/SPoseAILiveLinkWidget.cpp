@@ -9,7 +9,7 @@
 TWeakPtr<ILiveLinkSource> SPoseAILiveLinkWidget::source = nullptr;
 
 static TArray<FString> PoseAI_Modes = { "Room", "Desktop", "Portrait", "RoomBodyOnly", "PortraitBodyOnly" };
-static TArray<FString> PoseAI_Rigs = { "UE4", "MetaHuman", "Mixamo" };
+static TArray<FString> PoseAI_Rigs = { "UE4", "MetaHuman", "Mixamo", "DazUE"};
 
 const FString SPoseAILiveLinkWidget::section = "PoseLiveLink.SourceConfig";
 int32 SPoseAILiveLinkWidget::portNum = PoseAILiveLinkSingleSource::portDefault;

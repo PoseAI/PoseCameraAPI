@@ -12,6 +12,14 @@
 
 #define LOCTEXT_NAMESPACE "PoseAI"
 
+struct POSEAILIVELINK_API Remapping
+{
+	FName TargetJointName;
+	FQuat RotAdj;
+	Remapping(FName TargetJointName, FQuat RotAdj) : TargetJointName(TargetJointName), RotAdj(RotAdj) {};
+};
+
+
 
 /**
  * Abstract base class for the different rig formats streamable by Pose AI
@@ -99,20 +107,27 @@ class POSEAILIVELINK_API PoseAIRig
 class POSEAILIVELINK_API PoseAIRigUE4 : public PoseAIRig {
   public:
 	PoseAIRigUE4(FLiveLinkSubjectName name, const FPoseAIHandshake& handshake) : PoseAIRig(name, handshake) {};
-  private:
+protected:
 	void Configure();
 };
 
 class POSEAILIVELINK_API PoseAIRigMixamo : public PoseAIRig {
   public:
 	PoseAIRigMixamo(FLiveLinkSubjectName name, const FPoseAIHandshake& handshake) :	PoseAIRig(name, handshake) {};
-private:
+protected:
 	void Configure();
 };
 
 class POSEAILIVELINK_API PoseAIRigMetaHuman : public PoseAIRig {
 public:
 	PoseAIRigMetaHuman(FLiveLinkSubjectName name, const FPoseAIHandshake& handshake) : PoseAIRig(name, handshake) {};
-private:
+protected:
+	void Configure();
+};
+
+class POSEAILIVELINK_API PoseAIRigDazUE : public PoseAIRig {
+public:
+	PoseAIRigDazUE(FLiveLinkSubjectName name, const FPoseAIHandshake& handshake) : PoseAIRig(name, handshake) {};
+protected:
 	void Configure();
 };
