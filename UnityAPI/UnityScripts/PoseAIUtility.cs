@@ -2,13 +2,162 @@
 
 using UnityEngine;
 using System.Collections.Generic;
-using System.Reflection;
-using System.Diagnostics;
-using System;
-
 
 namespace PoseAI
 {
+    /// <summary>
+    /// Component to load 
+    /// </summary>
+    public class PoseAIRuntimeLoader
+    {
+        // the path must be relative to a 'Resources' folder in the project structure.  If necessary move files into a Resources folder
+        public static string DefaultAnimationControllerPath = "StarterAssets/ThirdPersonController/Character/Animations/StarterAssetsThirdPerson";
+
+        // specify which type of rig you use
+        public static PoseAI_Rigs rigType = PoseAI_Rigs.Unity;
+
+        // specify the rig remapping here, if any, to make sure it is set for each new avatar
+        public static string Remapping = "";
+
+        
+        /*
+         * pass in 
+         * 1. gameCharacter to be initialized with PoseAIComponents
+         * 2. a configured avatar from a template character 
+         * 3. either a new port for a new source, or an exsiting PoseAISource (i.e. if player is already connected and we are animating a new character or scene).
+         * 4. optionally pass in a different animation controller if you want to use different animation controllers in different parts of the game
+         */
+        public static bool RuntimeLoad(GameObject gameCharacter, Avatar avatar, int port = 0, PoseAISourceDirect poseAISourceIn = null, RuntimeAnimatorController animationController = null)
+        {
+            Debug.Assert(poseAISourceIn != null || port != 0);
+
+            /* 
+             * adds an animator component if it doesn't exist.  Then configures key required properties:  
+            * 1. runtimeAnimatorController - this should be a controller with IK pass enabled and the state machine logic referred to in the PoseAICharacterController
+            * 2. avatar - this should be a configured humanoid avatar with the correct mappings for the Mecanim system.  Difficult to create at Runtime, easier to pass in from a template character in the project.
+            */
+            Animator animator = gameCharacter.GetComponent<Animator>();
+            if (animator == null)
+                animator = gameCharacter.AddComponent<Animator>() as Animator;
+            if (animationController == null)
+            {
+                animator.runtimeAnimatorController = Resources.Load(DefaultAnimationControllerPath) as RuntimeAnimatorController;
+                if (animator.runtimeAnimatorController == null)
+                {
+                    Debug.LogWarning("Failed to load animator at " + DefaultAnimationControllerPath);
+                    return false;
+                }
+            }
+            else
+            {
+                animator.runtimeAnimatorController = animationController;
+            }
+            animator.avatar = avatar;
+
+            /* 
+             * adds an default character controller and configures the capsule.  may need to be tweaked to suit game and rig 
+            */
+            CharacterController characterController = gameCharacter.GetComponent<CharacterController>();
+            if (characterController == null)
+                characterController = gameCharacter.AddComponent<CharacterController>() as CharacterController;
+            characterController.radius = 0.28f;
+            characterController.height = 1.8f;
+            characterController.center = new Vector3(0.0f, 0.93f, 0.0f);
+
+            /* 
+             * if an established Source is not passed to loader, this sets up a new poseAI source to listen on the specified port. 
+            */
+            PoseAISource poseAISource;
+            if (poseAISourceIn != null)
+            {
+                PoseAISourceShared poseAISourceShared = gameCharacter.AddComponent<PoseAISourceShared>() as PoseAISourceShared;
+                poseAISourceShared.Source = poseAISourceIn;
+                poseAISource = poseAISourceShared;
+            }
+            else
+            {
+                PoseAISourceDirect poseAISourceDirect = gameCharacter.GetComponent<PoseAISourceDirect>();
+                if (poseAISourceDirect == null)
+                    poseAISourceDirect = gameCharacter.AddComponent<PoseAISourceDirect>() as PoseAISourceDirect;
+                poseAISourceDirect.Mode = PoseAI_Modes.Room;
+                poseAISourceDirect.RigType = rigType;
+                poseAISourceDirect.Port = port;
+                poseAISourceDirect.MirrorCamera = false;
+                poseAISource = poseAISourceDirect;
+            }
+
+            /* 
+             * if an established Source is not passed to loader, this sets up a new poseAI source to listen on the specified port. 
+            */
+            PoseAICharacterAnimator poseAICharacterAnimator = gameCharacter.GetComponent<PoseAICharacterAnimator>();
+            if (poseAICharacterAnimator == null)
+                poseAICharacterAnimator = gameCharacter.AddComponent<PoseAICharacterAnimator>() as PoseAICharacterAnimator;
+            poseAICharacterAnimator.SetSource(poseAISource);
+            poseAICharacterAnimator.SetRemapping(Remapping);
+            poseAICharacterAnimator.OverrideRootName = "";
+            poseAICharacterAnimator.JointNamePrefix = "";
+
+            PoseAICharacterController poseAICharacterController = gameCharacter.GetComponent<PoseAICharacterController>();
+            if (poseAICharacterController == null)
+                poseAICharacterController = gameCharacter.AddComponent<PoseAICharacterController>() as PoseAICharacterController;
+            poseAICharacterController.SetSource(poseAISource);
+            poseAICharacterController.CinemachineCameraTarget = GameObject.Find("PlayerFollowCamera");
+
+            if (animator == null)
+            {
+                Debug.LogWarning("Failed to load animator");
+                return false;
+            }
+            if (animator.avatar == null)
+            {
+                Debug.LogWarning("Failed to load animator's avatar");
+                return false;
+            }
+            if (characterController == null)
+            {
+                Debug.LogWarning("Failed to load character controller");
+                return false;
+            }
+            if (poseAISource == null)
+            {
+                Debug.LogWarning("Failed to load source");
+                return false;
+            }
+            if (poseAICharacterAnimator == null)
+            {
+                Debug.LogWarning("Failed to load poseaicharacteranimator");
+                return false;
+            }
+            if (poseAICharacterController == null)
+            {
+                Debug.LogWarning("Failed to load poseaicharactercontroller");
+                return false;
+            }
+            return true;
+        }
+
+
+        public void EnableOrDisablePoseAI(GameObject gameCharacter, bool enabled)
+        {
+            PoseAISourceDirect poseAISource = gameCharacter.GetComponent<PoseAISourceDirect>();
+            if (poseAISource != null)
+                poseAISource.enabled = enabled;
+
+            PoseAICharacterAnimator poseAICharacterAnimator = gameCharacter.GetComponent<PoseAICharacterAnimator>();
+            if (poseAICharacterAnimator != null)
+                poseAICharacterAnimator.enabled = enabled;
+
+            PoseAICharacterController poseAICharacterController = gameCharacter.GetComponent<PoseAICharacterController>();
+            if (poseAICharacterController != null)
+                poseAICharacterController.enabled = enabled;
+
+        }
+
+
+    }
+
+
+
     public static class PoseAI_Decoder
     {
         static readonly uint[] reverse_map = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 62, 63, 62, 62, 63, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 0, 0, 0, 0, 63, 0, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51 };
@@ -131,5 +280,7 @@ namespace PoseAI
             return retValue;
         }
     }
+
+    
 }
 
