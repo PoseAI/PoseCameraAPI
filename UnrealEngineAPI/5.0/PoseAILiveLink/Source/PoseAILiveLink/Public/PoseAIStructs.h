@@ -52,11 +52,20 @@ struct POSEAILIVELINK_API FPoseAIHandshake
 
     /* controls compactness of packet.  0 is verbose JSON (mainly use for debugging), 1 is fairly compact JSON (preferred as of this plugin release).  We may add even more condensed formats in the future.*/
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
-        int32 packetFormat = 1;
+    int32 packetFormat = 1;
 
     /* whether to include motion within camera frame in hips or in root*/
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
     bool useRootMotion = false;
+
+    /* Not needed for PoseCam.  Used only for licensee connection and verification.*/
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
+    FString whoami = "";
+
+    /* Not needed for PoseCam.  Used only for licencee connection and verification.*/
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
+    FString signature = "";
+
 
     FString ToString() const;
 

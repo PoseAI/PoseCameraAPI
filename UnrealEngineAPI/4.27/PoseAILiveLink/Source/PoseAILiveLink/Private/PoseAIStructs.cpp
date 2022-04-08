@@ -65,6 +65,8 @@ FString FPoseAIHandshake::ToString() const {
             "\"rig\":\"%s\", "
             "\"mode\":\"%s\", "
             "\"context\":\"%s\", "
+            "\"whoami\":\"%s\", "
+            "\"signature\":\"%s\", "
             "\"mirror\":\"%s\", "
             "\"syncFPS\": %d, "
             "\"cameraFPS\": %d, "
@@ -73,6 +75,8 @@ FString FPoseAIHandshake::ToString() const {
         *rig,
         *mode,
         *context,
+        *whoami,
+        *signature,
         *(YesNoString(isMirrored)),
         syncFPS,
         cameraFPS,
