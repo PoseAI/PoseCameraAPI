@@ -1,11 +1,20 @@
-# Version revision log
+## Pose Camera 1.2 and PoseAI Engine Framework 1.2
+Released April 2022. 
+* We have added our Version 2 AI model for Desktop mode as well.  
+* Small additional improvement to reduce potential hand jitter in all modes
+* Added support and preset for Daz rigs, based on the DAZ-UE bridge export settings.  Direct FBX exports have different base rotations and will not retarget correctly
+ 
+#### Game Engine API changes
+* Added support for UE5. The new UE5 mannequin can best be animated using the 'MetaHuman' rig setting (it has extra joints corresponding to the more complex MetaHuman rig)
+* We also corrected the Unreal Engine version plugins to properly handle X-axis lateral motion (flipped since the 1.1 update).  See our additional documentation for a full explanation of our approach.
+* The UE handshake structure now includes two optional fields for framework licensee verification.  These already existing in the Unity handshake structure
 
 
 ## Pose Camera 1.1 and PoseAI Engine Framework 1.1
-Released March 2022. [Note Pose Camera update is still going through Apple process. We expect public release during week of March 7th]
+Released March 2022. 
 
 #### Updated AI and smoothing
-We have added our Version 2 AI model for mobile.  This model should be more accurate in most situations than our V1 model
+We have added our Version 2 AI model for mobile for ROOM mode.  This model should be more accurate in most situations than our V1 model
 * better depth perception
 * better tracking for faster moving subjects
 * better recognition of on-floor movements.  This is still an area of development as our main use case is standing or seated (in chair/sofa) subject.
@@ -19,11 +28,9 @@ We have added our Version 2 AI model for mobile.  This model should be more accu
 * We also made the base rotation of the entire rig in the different modes consistent.
 * Screen positions and body height are now scaled by the longest dimension - for a 16:9 view the x would range -1 to +1 and the y -9/16ths to +9/16ths. (Previously they were scaled to always be +/-1 for y).
 * Fixed: avatar would jump when using screen position to adjust root movement and when using compressed packet format.  This was due to overflow and the scaling issue above.
-* Hand zones calculation adjusted to more naturally trigger the different zones.  Corrected relative adjustment so zones should now be relative to the user's torso, compensatig if the user twists to face another direction.
+* Hand zones calculation adjusted to more naturally trigger the different zones.  Corrected relative adjustment so zones should now be relative to the user's torso, compensating if the user twists to face another direction.
 * Flapping arm event should trigger more easily and consistently.  Event 50 is less likely however (double arm flap) as single arm flaps are likely to be triggered first.
 * Jumping event has additional considtions which should reduce spurious jumps.  This is still work in progress and we plan a broad revision to event recognition in the future.
-
-
 
 
   

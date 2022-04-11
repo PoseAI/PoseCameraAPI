@@ -105,7 +105,7 @@ bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLink
 
 	if (visibilityFlags.isTorso && liveValues.bodyHeight > 0.0f)
 		liveValues.rootTranslation = FVector(
-			liveValues.hipScreen[0] * rigHeight / liveValues.bodyHeight,
+			-liveValues.hipScreen[0] * rigHeight / liveValues.bodyHeight, //x is left in Unreal so flip
 			0.0f, //currently no body distance estimate from pose camera
 			0.0f
 		);
@@ -218,18 +218,18 @@ void PoseAIRig::AssignCharacterMotion(FLiveLinkAnimationFrameData& data) {
 	TArray<FTransform> componentTransform;
 	componentTransform.Emplace(data.Transforms[0]);
 	componentTransform.Emplace(data.Transforms[1]);
-	float minZ = 0.0f;
-	for (int32 j = 2; j < numBodyJoints; j++) {
-		componentTransform.Emplace(data.Transforms[j] * componentTransform[parentIndices[j]]);
-		minZ = FGenericPlatformMath::Min(minZ, componentTransform[j].GetTranslation().Z);
-	}
-	minZ -= rootHipOffsetZ;
-
 	FVector baseTranslation;
+	float minZ = 0.0f;
 	if (isDesktop)
 		baseTranslation = FVector(0.0f, 0.0f, rigHeight * 0.5f);
-	else
+	else {
 		baseTranslation = liveValues.rootTranslation; //careful as this assumes liveValues has been updated already this frame
+		for (int32 j = 2; j < numBodyJoints; j++) {
+			componentTransform.Emplace(data.Transforms[j] * componentTransform[parentIndices[j]]);
+			minZ = FGenericPlatformMath::Min(minZ, componentTransform[j].GetTranslation().Z);
+		}
+	}
+	minZ -= rootHipOffsetZ;
 
 	// assigns motion either to root or to hips
 	if (useRootMotion) {

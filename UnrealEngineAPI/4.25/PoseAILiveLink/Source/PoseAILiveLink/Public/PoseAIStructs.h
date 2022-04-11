@@ -30,7 +30,7 @@ struct POSEAILIVELINK_API FPoseAIHandshake
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
     FString mode = "Room";
 
-    /* the skeletal rig to use, based on standard nomenclature and rotations: "UE4", "MetaHuman", "Mixamo" */
+    /* the skeletal rig to use, based on standard nomenclature and rotations: "UE4", "MetaHuman", "DazUE", "Mixamo" */
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
     FString rig = "UE4";
 
