@@ -58,7 +58,7 @@ public:
 	{
 		check(Socket != nullptr);
 		check(Socket->GetSocketType() == SOCKTYPE_Datagram);
-
+		Reader->SetNumUninitialized(MaxReadBufferSize);
 		SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
 	}
 
@@ -154,17 +154,15 @@ protected:
 		
 		while (Socket!=nullptr && Socket.IsValid() && Socket->HasPendingData(Size))
 		{			
-			Reader->SetNumUninitialized(FMath::Min(Size, MaxReadBufferSize));
+			
 			
 			int32 Read = 0;
-			if (Socket->RecvFrom(Reader->GetData(), Reader->Num(), Read, *Sender))
+			if (Socket->RecvFrom(Reader->GetData(), FMath::Min(Size, MaxReadBufferSize), Read, *Sender))
 			{
-				ensure((uint32)Read < MaxReadBufferSize);
-				Reader->RemoveAt(Read, Reader->Num() - Read, false);
 				// we also send the messages via delegate as FStrings instead of FArrayReaderPtrs
 				FString recvMessage;
 				char* bytedata = (char*)Reader->GetData();
-				bytedata[Reader->Num()] = '\0';
+				bytedata[FMath::Min(Size, MaxReadBufferSize)] = '\0';
 				recvMessage = FString(UTF8_TO_TCHAR(bytedata));
 				DataReceivedDelegate.ExecuteIfBound(recvMessage, FPoseAIEndpoint(Sender));
 			}
