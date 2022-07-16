@@ -10,8 +10,6 @@ This can best be seen inspecting the output by using the python example and most
 Below we summarise the output structure.  Note that the exact components will depend on which mode the Camera is using - obviously the hand fields will not be included if the camera is in body mode only.  And over time we plan on extending the supplementary information provided, i.e. beyond joint rotations.
 
 
-NOTE: OUT OF DATE,   NEEDS UPDATE
-
 ### Top level JSON
 At the top level the JSON record has four fields:
 {
