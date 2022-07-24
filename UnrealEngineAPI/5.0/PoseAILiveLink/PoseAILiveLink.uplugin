@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "1.35",
+	"VersionName": "1.36",
 	"FriendlyName": "PoseAI LiveLink",
 	"Description": "Live Link plugin to stream from the Pose Camera mobile app by PoseAI",
 	"Category": "Animation",

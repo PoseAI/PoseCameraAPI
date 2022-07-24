@@ -160,10 +160,8 @@ protected:
 			if (Socket->RecvFrom(Reader->GetData(), FMath::Min(Size, MaxReadBufferSize), Read, *Sender))
 			{
 				// we also send the messages via delegate as FStrings instead of FArrayReaderPtrs
-				FString recvMessage;
-				char* bytedata = (char*)Reader->GetData();
-				bytedata[FMath::Min(Size, MaxReadBufferSize)] = '\0';
-				recvMessage = FString(UTF8_TO_TCHAR(bytedata));
+				UTF8CHAR* bytedata = (UTF8CHAR*)Reader->GetData();
+				FString recvMessage = FString(Read, bytedata);
 				DataReceivedDelegate.ExecuteIfBound(recvMessage, FPoseAIEndpoint(Sender));
 			}
 		}

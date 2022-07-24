@@ -102,7 +102,7 @@ void PoseAILiveLinkServer::ReceiveUDPDelegate(const FString& recvMessage, const 
 	if (!FJsonSerializer::Deserialize(Reader, jsonObject)) {
 		static const FName NAME_JsonError = "PoseAILiveLink_JsonError";
 		FLiveLinkSubjectKey failKey = FLiveLinkSubjectKey(GUID_Error, FName(endpointRecv.ToString()));
-		FLiveLinkLog::WarningOnce(NAME_JsonError, failKey, TEXT("PoseAI: failed to deserialize json object from %s"), *endpointRecv.ToString());
+		FLiveLinkLog::WarningOnce(NAME_JsonError, failKey, TEXT("PoseAI: failed to deserialize json object from %s, %s"), *endpointRecv.ToString(), *Reader->GetErrorMessage());
 		return;
 	}
 	bool sameAsCurrent = endpoint.IsValid() && (endpoint.ToString() == endpointRecv.ToString());
