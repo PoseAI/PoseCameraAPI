@@ -162,14 +162,15 @@ protected:
 				
 				// UE4.2x versions
 				UTF8CHAR* bytedata_utf8 = (UTF8CHAR*)Reader->GetData();
-				TCHAR* bytedata = UTF8_TO_TCHAR(bytedata_utf8);
+				FString recvMessage = FString(BytesRead, UTF8_TO_TCHAR(bytedata_utf8)); //important: keep UE MACRO inside function
 				// end UE4.2x
 
 				// UE5.0
 				// UTF8CHAR* bytedata = (UTF8CHAR*)Reader->GetData();
+				// FString recvMessage = FString(BytesRead, bytedata);
 				// end UE5.0
 
-				FString recvMessage = FString(BytesRead, bytedata);
+
 				DataReceivedDelegate.ExecuteIfBound(recvMessage, FPoseAIEndpoint(Sender));
 			}
 
