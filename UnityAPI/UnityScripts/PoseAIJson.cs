@@ -417,6 +417,8 @@ namespace PoseAI
         public List<float> HipScreen = new List<float> { 0.0f, 0.0f };
         public List<float> ChestScreen = new List<float> { 0.0f, 0.0f };
         public List<float> HipLean = new List<float> { 0.0f, 0.0f };
+        public List<float> HandIkL = new List<float> { 0.0f, 0.0f, 0.0f };
+        public List<float> HandIkR = new List<float> { 0.0f, 0.0f, 0.0f };
 
 
         public void ProcessCompact(ref string compactString)
@@ -428,6 +430,13 @@ namespace PoseAI
             HipScreen[1] = PoseAI_Decoder.FixedB64pairToFloat(compactString[6], compactString[7]);
             ChestScreen[0] = PoseAI_Decoder.FixedB64pairToFloat(compactString[8], compactString[9]);
             ChestScreen[1] = PoseAI_Decoder.FixedB64pairToFloat(compactString[10], compactString[11]);
+            if (compactString.Length < 24) return;
+            HandIkL[0] = PoseAI_Decoder.FixedB64pairToFloat(compactString[12], compactString[13]) * 4.0f;
+            HandIkL[1] = PoseAI_Decoder.FixedB64pairToFloat(compactString[14], compactString[15]) * 4.0f;
+            HandIkL[2] = PoseAI_Decoder.FixedB64pairToFloat(compactString[16], compactString[17]) * 4.0f;
+            HandIkR[0] = PoseAI_Decoder.FixedB64pairToFloat(compactString[18], compactString[19]) * 4.0f;
+            HandIkR[1] = PoseAI_Decoder.FixedB64pairToFloat(compactString[20], compactString[21]) * 4.0f;
+            HandIkR[2] = PoseAI_Decoder.FixedB64pairToFloat(compactString[22], compactString[23]) * 4.0f;
         }
 
     }
@@ -624,14 +633,14 @@ namespace PoseAI
         public void ProcessCompact(ref string compactString)
         {
             List<EventPairBase> compactOrder = new List<EventPairBase> { Footstep, SidestepL, SidestepR, Jump, FeetSplit, ArmPump, ArmFlex, ArmGestureL, ArmGestureR };
-            if (compactString.Length % 5 != 0)
+            if (compactString.Length < compactOrder.Count * 5)
             {
-                UnityEngine.Debug.Log("PoseAI: Invalid event string.");
+                // string is invalid or missing (may be excluded from SDK for speed).
                 return;
             }
             for (int i = 0; i < compactOrder.Count; ++i)
             {
-                if (compactString.Length < 5 * i)
+                if (compactString.Length < 5 * i  + 5)
                     break;
                 compactOrder[i].ProcessCompact(compactString.Substring(i * 5, 5));
             }
