@@ -655,7 +655,7 @@ namespace PoseAI
         public ScalarsHand Scalars = new ScalarsHand();
 
         // compressed format field
-        public string RotA;
+        public string RotA = "";
     }
 
     [System.Serializable]
