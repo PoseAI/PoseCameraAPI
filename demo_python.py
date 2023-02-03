@@ -38,6 +38,7 @@ handshake = json.dumps(
             'mirror': 'YES',  # Options: 'YES', 'NO'
             'syncFPS': 60, # App smooths processed frames to constant FPS.  0 for async mode (will still smooth joints between processed frames)
             'cameraFPS': 60, # Tries to set camera to this speed. 30 and 60 work on most iphone cameras
+            'packetFormat': 0, # 0 if verbose and human readable, but may exceed packet size limits. 1 is compact and what we use normally.
         }
     }
 ).encode()
