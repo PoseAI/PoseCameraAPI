@@ -91,6 +91,10 @@ namespace PoseAI
         // packet format.  0 is verbose, 1 is compressed
         public int PF;
 
+        // face blendshapes if available.  This will only work if PF=1  (compressed).  For Verbose need to change this to a List. May to resolve in future release
+        public string Face = "";
+        public List<float> blendshapes = new List<float>();
+
         //receives compact touch updates from app, and adds them as vector 2s to Queue for game logic processing.  Values are relative to phone not user (use orientation to rotate as appropriate)
         public string TouchState = "";
         public string Touches = "";
@@ -220,7 +224,9 @@ namespace PoseAI
                 GetBody().Vectors.ProcessCompact(ref GetBody().VecA);
                 GetBody().Events.ProcessCompact(ref GetBody().EveA);
                 visibility.ProcessCompact(ref GetBody().VisA);
-            } else
+                ProcessFace();
+            }
+            else
             {
                 visibility.ProcessVerbose(ref GetBody().Scalars);
             }
@@ -334,6 +340,15 @@ namespace PoseAI
                 List<float> flatArray = new List<float>(compactString.Length / 2);
                 PoseAI_Decoder.FStringFixed12ToFloat(ref compactString, ref flatArray);
                 PoseAI_Decoder.FlatArrayToQuats(ref flatArray, ref quats);
+            }
+        }
+
+        private void ProcessFace()
+        {
+            if (Face.Length > 1)
+            {
+                blendshapes = new List<float>(Face.Length / 2);
+                PoseAI_Decoder.FStringFixed12ToFloat(ref Face, ref blendshapes);
             }
         }
 

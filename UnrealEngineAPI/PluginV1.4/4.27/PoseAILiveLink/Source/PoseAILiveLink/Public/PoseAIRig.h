@@ -64,11 +64,15 @@ class POSEAILIVELINK_API PoseAIRig
 	bool useRootMotion;
 	bool includeHands;
 	bool isMirrored;
+	bool isLowerBodyRotated;
 	bool isDesktop;
 	int32 numBodyJoints = 21;
 	int32 numHandJoints = 17;
 	// number of joints to insert in desktop mode (as camera omits quaternions for unused joints)
 	int32 lowerBodyNumOfJoints = 8; 
+
+	int32 rShinJoint = 3;
+	int32 lShinJoint = 7;
 
 		
 	bool isCrouching = false;
@@ -89,7 +93,7 @@ class POSEAILIVELINK_API PoseAIRig
 	float rigHeight = 170.0f;
 	
 	//extra offset for hip bone to accomodate mesh thickness from bone sockets.
-	float rootHipOffsetZ = 1.0f;
+	float rootHipOffsetZ = 2.0f;
 
 	void AddBone(FName boneName, FName parentName, FVector translation);
 	void AddBoneToLast(FName boneName, FVector translation);
@@ -102,6 +106,7 @@ class POSEAILIVELINK_API PoseAIRig
 	void ProcessCompactSupplementaryData(const TSharedPtr<FJsonObject> jsonObject, FLiveLinkAnimationFrameData& data);
 	void TriggerEvents();
 	void AssignCharacterMotion(FLiveLinkAnimationFrameData& data);
+	void RotateLowerBody180(TArray<FQuat>& quatArray);
 };
 
 class POSEAILIVELINK_API PoseAIRigUE4 : public PoseAIRig {
@@ -117,6 +122,14 @@ class POSEAILIVELINK_API PoseAIRigMixamo : public PoseAIRig {
 protected:
 	void Configure();
 };
+
+class POSEAILIVELINK_API PoseAIRigMixamoAlt : public PoseAIRig {
+public:
+	PoseAIRigMixamoAlt(FLiveLinkSubjectName name, const FPoseAIHandshake& handshake) : PoseAIRig(name, handshake) {};
+protected:
+	void Configure();
+};
+
 
 class POSEAILIVELINK_API PoseAIRigMetaHuman : public PoseAIRig {
 public:

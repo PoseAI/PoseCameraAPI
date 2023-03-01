@@ -24,13 +24,13 @@ bool isDifferentAndSet(int32 newValue, int32& storedValue) {
 PoseAIRig::PoseAIRig(FLiveLinkSubjectName name, const FPoseAIHandshake& handshake) :
 	name(name),
 	rigType(FName(handshake.GetRigString())),
-	useRootMotion(handshake.useRootMotion), 
+	useRootMotion(handshake.useRootMotion),
 	includeHands(handshake.IncludesHands()),
 	isMirrored(handshake.isMirrored),
+	isLowerBodyRotated(handshake.isLowerBodyRotated),
 	isDesktop(handshake.mode == EPoseAiAppModes::Desktop) {
 	Configure();
 }
-
 
 TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> PoseAIRig::PoseAIRigFactory(const FLiveLinkSubjectName& name, const FPoseAIHandshake& handshake) {
 	TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> rigPtr;
@@ -40,6 +40,9 @@ TSharedPtr<PoseAIRig, ESPMode::ThreadSafe> PoseAIRig::PoseAIRigFactory(const FLi
 			break;
 		case EPoseAiRigPresets::Mixamo:
 			rigPtr = MakeShared<PoseAIRigMixamo, ESPMode::ThreadSafe>(name, handshake);
+			break;
+		case EPoseAiRigPresets::MixamoAlt:
+			rigPtr = MakeShared<PoseAIRigMixamoAlt, ESPMode::ThreadSafe>(name, handshake);
 			break;
 		case EPoseAiRigPresets::DazUE:
 			rigPtr = MakeShared<PoseAIRigDazUE, ESPMode::ThreadSafe>(name, handshake);
@@ -117,7 +120,7 @@ bool PoseAIRig::ProcessFrame(const TSharedPtr<FJsonObject> jsonObject, FLiveLink
 		liveValues.rootTranslation = FVector(
 			-liveValues.hipScreen[0] * rigHeight / liveValues.bodyHeight, //x is left in Unreal so flip
 			0.0f, //currently no body distance estimate from pose camera
-			0.0f
+			0.0f // could do this if game calibrates from a player starting position: liveValues.hipScreen[1] * rigHeight / liveValues.bodyHeight
 		);
 
 	TriggerEvents();
@@ -223,21 +226,34 @@ void PoseAIRig::ProcessCompactSupplementaryData(const TSharedPtr<FJsonObject> js
 }
 
 void PoseAIRig::AssignCharacterMotion(FLiveLinkAnimationFrameData& data) {
-	FVector baseTranslation;
-	float minZ = 0.0f;
-	if (isDesktop)
-		baseTranslation = FVector(0.0f, 0.0f, rigHeight * 0.5f);
-	else {
+	FVector baseTranslation = FVector::ZeroVector;
+	// seperating into lowest body part in case we want to connect with AI later
+	float minTorso = 0.0f;
+	float minFeetZ = 0.0f;
+	float minKnees = 0.0f;
+	float minHands = 0.0f;
+
+	if (!isDesktop)
 		baseTranslation = liveValues.rootTranslation; //careful as this assumes liveValues has been updated already this frame
-		TArray<FTransform> componentTransform;
-		componentTransform.Emplace(data.Transforms[0]);
-		componentTransform.Emplace(data.Transforms[1]);
-		// to ensure grounding in the capsule, calculates lowest Z in component space.  doesn't check fingers to save calculations on fingers: if this is important consider using parents.Num()
-		for (int32 j = 2; j < numBodyJoints; j++) {
-			componentTransform.Emplace(data.Transforms[j] * componentTransform[parentIndices[j]]);
-			minZ = FGenericPlatformMath::Min(minZ, componentTransform[j].GetTranslation().Z);
-		}
+
+	TArray<FTransform> componentTransform;
+	componentTransform.Emplace(data.Transforms[0]);
+	componentTransform.Emplace(data.Transforms[1]);
+	// to ensure grounding in the capsule, calculates lowest Z in component space. Does not include hands
+	for (int32 j = 2; j < parentIndices.Num(); j++) {
+		componentTransform.Emplace(data.Transforms[j] * componentTransform[parentIndices[j]]);
+		if (j == rShinJoint + 1 || j == rShinJoint + 2 || j == lShinJoint + 1 || j == lShinJoint + 2)
+					minFeetZ = FGenericPlatformMath::Min(minFeetZ, componentTransform[j].GetTranslation().Z);
+		else if (j == rShinJoint || j == lShinJoint)
+			minKnees = FGenericPlatformMath::Min(minKnees, componentTransform[j].GetTranslation().Z);
+		else if (j >= numBodyJoints)
+			minHands = FGenericPlatformMath::Min(minHands, componentTransform[j].GetTranslation().Z);
+		else
+			minTorso = FGenericPlatformMath::Min(minTorso, componentTransform[j].GetTranslation().Z);
 	}
+
+	float minZ = FMath::Min(FMath::Min(minTorso, minHands), FMath::Min(minFeetZ, minKnees));
+
 	minZ -= rootHipOffsetZ;
 
 	// assigns motion either to root or to hips
@@ -292,11 +308,15 @@ bool PoseAIRig::ProcessCompactRotations(const TSharedPtr<FJsonObject> jsonObject
 			TArray<FQuat> quatArray;
 			FStringFixed12ToFloat(rotaBody, flatArray);
 			FlatArrayToQuats(flatArray, quatArray);
+			if (isLowerBodyRotated) {
+				RotateLowerBody180(quatArray);
+			}
 			AppendQuatArray(quatArray, 1, componentRotations, data); //start at 1 as pose camera does not include the root joint
 		}
 		else
 			AppendCachedRotations(1, numBodyJoints, componentRotations, data);
 		
+
 		if (includeHands) {
 			if (rotaHandLeft.Len() > 7) {
 				TArray<float> flatArray;
@@ -384,7 +404,7 @@ bool PoseAIRig::ProcessVerboseRotations(const TSharedPtr<FJsonObject> jsonObject
 			data.Transforms.Add(transform);
 		}
 
-		AssignCharacterMotion(data);
+	    AssignCharacterMotion(data);
 		CachePose(data.Transforms);
 
 		hasProcessedRotations = true;
@@ -428,6 +448,15 @@ void PoseAIRig::ProcessVerboseSupplementaryData(const TSharedPtr<FJsonObject> js
 	liveValues.jumpHeight = verbose.Events.Jump.Magnitude;
 	visibilityFlags.ProcessVerbose(verbose.Scalars);
 }
+
+void PoseAIRig::RotateLowerBody180(TArray<FQuat>& quatArray) {
+	FQuat q180 = FQuat(0.0, 0.0, 1.0, 0.0);
+	for (int32 i = 0; i < lowerBodyNumOfJoints + 1; ++i) {
+		quatArray[i] = q180 * quatArray[i];
+	}
+
+}
+
 
 void PoseAIRig::AppendQuatArray(const TArray<FQuat>& quatArray, int32 begin, TArray<FQuat>& componentRotations, FLiveLinkAnimationFrameData& data) {
 	for (int32 i = begin; i < begin + quatArray.Num(); i++) {
@@ -619,6 +648,83 @@ void PoseAIRigMixamo::Configure()
 	rig = MakeStaticData();
 }
 
+void PoseAIRigMixamoAlt::Configure()
+{
+	jointNames.Empty();
+	boneVectors.Empty();
+	parentIndices.Empty();
+	AddBone(TEXT("root"), TEXT("root"), FVector(0.0, 0, 0.0));
+	AddBoneToLast(TEXT("hips"), FVector(0.0, 0, 0.0));
+
+	AddBone(TEXT("RightUpLeg"), TEXT("hips"), FVector(-9.4, 5.0, 0));
+	AddBoneToLast(TEXT("RightLeg"), FVector(0, 44.5, 0));
+	AddBoneToLast(TEXT("RightFoot"), FVector(0.7, 35.0, -2.4));
+	AddBoneToLast(TEXT("RightToeBase"), FVector(0, 11.0, 13.0));
+
+	AddBone(TEXT("LeftUpLeg"), TEXT("hips"), FVector(9.4, 5.0, 0));
+	AddBoneToLast(TEXT("LeftLeg"), FVector(-0, 44.5, 0));
+	AddBoneToLast(TEXT("LeftFoot"), FVector(-0.7, 35.0, -2.4));
+	AddBoneToLast(TEXT("LeftToeBase"), FVector(0, 11.0, 13.0));
+
+	AddBone(TEXT("Spine"), TEXT("hips"), FVector(0, -9.0, -0.3));
+	AddBoneToLast(TEXT("Spine1"), FVector(0, -10.5, 0));
+	AddBoneToLast(TEXT("Spine2"), FVector(0, -12.0, 0));
+	AddBoneToLast(TEXT("Neck"), FVector(0, -13.5, 0));
+	AddBoneToLast(TEXT("Head"), FVector(0, -8.2, 2.1));
+
+	AddBone(TEXT("LeftShoulder"), TEXT("Spine2"), FVector(5.7, -11.8, 0));
+	AddBoneToLast(TEXT("LeftArm"), FVector(12.0,0, 0));
+	AddBoneToLast(TEXT("LeftForeArm"), FVector(25.7,0, 0));
+
+	AddBone(TEXT("RightShoulder"), TEXT("Spine2"), FVector(-5.7, -11.8, 0));
+	AddBoneToLast(TEXT("RightArm"), FVector(-12.0,0, 0	));
+	AddBoneToLast(TEXT("RightForeArm"), FVector(-25.7,0, 0));
+
+	numBodyJoints = jointNames.Num();
+	if (includeHands) {
+		AddBone(TEXT("LeftHand"), TEXT("LeftForeArm"), FVector(23.0, 0, 0));
+		AddBone(TEXT("LeftForeArmTwist"), TEXT("LeftForeArm"), FVector(14.0,0, 0));
+
+		AddBone(TEXT("LeftHandIndex1"), TEXT("LeftHand"), FVector(-3.3, -8.3, 0.1));
+		AddBoneToLast(TEXT("LeftHandIndex2"), FVector(0, -3.1, 0));
+		AddBoneToLast(TEXT("LeftHandIndex3"), FVector(0, -2.9, 0));
+		AddBone(TEXT("LeftHandMiddle1"), TEXT("LeftHand"), FVector(-0.9, -8.5, -0.1));
+		AddBoneToLast(TEXT("LeftHandMiddle2"), FVector(0, -3.3, 0));
+		AddBoneToLast(TEXT("LeftHandMiddle3"), FVector(0, -3.1, 0));
+		AddBone(TEXT("LeftHandRing1"), TEXT("LeftHand"), FVector(1.1, -8.7, 0.2));
+		AddBoneToLast(TEXT("LeftHandRing2"), FVector(0, -2.7, 0));
+		AddBoneToLast(TEXT("LeftHandRing3"), FVector(0, -2.7, 0));
+		AddBone(TEXT("LeftHandPinky1"), TEXT("LeftHand"), FVector(3.1, -8.0, 0.2));
+		AddBoneToLast(TEXT("LeftHandPinky2"), FVector(0, -2.5, 0));
+		AddBoneToLast(TEXT("LeftHandPinky3"), FVector(0, -2.0, 0));
+		AddBone(TEXT("LeftHandThumb1"), TEXT("LeftHand"), FVector(-2.9, -2.6, 1.2));
+		AddBoneToLast(TEXT("LeftHandThumb2"), FVector(-0.7, -3.2, 0));
+		AddBoneToLast(TEXT("LeftHandThumb3"), FVector(0.2, -3.0, 0));
+
+		AddBone(TEXT("RightHand"), TEXT("RightForeArm"), FVector(-23.0,0,  0));
+		AddBone(TEXT("RightForeArmTwist"), TEXT("RightForeArm"), FVector(-14.0,0, 0));
+		AddBone(TEXT("RightHandIndex1"), TEXT("RightHand"), FVector(3.3, -8.3, 0.1));
+		AddBoneToLast(TEXT("RightHandIndex2"), FVector(0, -3.1, 0));
+		AddBoneToLast(TEXT("RightHandIndex3"), FVector(0, -2.9, 0));
+		AddBone(TEXT("RightHandMiddle1"), TEXT("RightHand"), FVector(0.9, -8.5, -0.1));
+		AddBoneToLast(TEXT("RightHandMiddle2"), FVector(0, -3.3, 0));
+		AddBoneToLast(TEXT("RightHandMiddle3"), FVector(0, -3.1, 0));
+		AddBone(TEXT("RightHandRing1"), TEXT("RightHand"), FVector(-1.1, -8.7, 0.2));
+		AddBoneToLast(TEXT("RightHandRing2"), FVector(0, -2.7, 0));
+		AddBoneToLast(TEXT("RightHandRing3"), FVector(0, -2.7, 0));
+		AddBone(TEXT("RightHandPinky1"), TEXT("RightHand"), FVector(-3.1, -8.0, 0.2));
+		AddBoneToLast(TEXT("RightHandPinky2"), FVector(0, -2.5, 0));
+		AddBoneToLast(TEXT("RightHandPinky3"), FVector(0, -2.0, 0));
+		AddBone(TEXT("RightHandThumb1"), TEXT("RightHand"), FVector(2.9, -2.6, 1.2));
+		AddBoneToLast(TEXT("RightHandThumb2"), FVector(0.7, -3.2, 0));
+		AddBoneToLast(TEXT("RightHandThumb3"), FVector(-0.2, -3.0, 0));
+	}
+	numHandJoints = (jointNames.Num() - numBodyJoints) / 2;
+	rigHeight = 161.0f;
+	rig = MakeStaticData();
+}
+
+
 
 void PoseAIRigMetaHuman::Configure()
 {
@@ -712,7 +818,11 @@ void PoseAIRigMetaHuman::Configure()
 
 void PoseAIRigDazUE::Configure()
 {
-	
+	//daz has extra joints in the legs
+	 rShinJoint = 4;
+	 lShinJoint = 9;
+	 lowerBodyNumOfJoints = 10;
+
 	jointNames.Empty();
 	boneVectors.Empty();
 	parentIndices.Empty();

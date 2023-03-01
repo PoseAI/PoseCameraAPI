@@ -40,12 +40,17 @@ enum class EPoseAiContext : uint8
 UENUM(BlueprintType)
 enum class EPoseAiRigPresets : uint8
 {
-    MetaHuman, UE4, Mixamo, DazUE 
+    MetaHuman, UE4, Mixamo, DazUE, MixamoAlt 
 };
 UENUM(BlueprintType)
 enum class EPoseAiHandModel : uint8
 {
     Version1, Version2_EXPERIMENTAL
+};
+UENUM(BlueprintType)
+enum class EPoseAiBodyModel : uint8
+{
+    Version2, Version3
 };
 
 
@@ -64,44 +69,57 @@ struct POSEAILIVELINK_API FPoseAIHandshake
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
     EPoseAiRigPresets rig = EPoseAiRigPresets::MetaHuman;
 
+    /* BETA: provides ARKit compatible animation blendshape stream for facial rigs */
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
+    bool isFaceAnimating = true;
 
     /* flips left/right limbs and rotates as if the player is looking at a mirror*/
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
-        bool isMirrored = true;
+    bool isMirrored = true;
+
+    /* rotates lower body 180 degrees - convenient for desktop mode in some perspectives*/
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
+    bool isLowerBodyRotated = false;
 
     /* whether to include motion within camera frame in hips or in root*/
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
-        bool useRootMotion = false;
-
+    bool useRootMotion = false;
 
     /* the desired camera speed.  On many phones only 30 or 60 FPS will be accepted and otherwise you get default*/
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
         int32 cameraFPS = 60;
-
   
     /* target frame rate for phone interpolation smoothing. Suggest 0 on Unreal. Events are raw.*/
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
         int32 syncFPS = 0;
-
-    /* controls compactness of packet. */
+    
+    /* version of our AI model: V2 is 2022 release, V3 currently Room/Portrait mode only as of March 2023 release*/
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
-        EPoseAiPacketFormat packetFormat = EPoseAiPacketFormat::Compact;
-        
+        EPoseAiBodyModel bodyModelVersion = EPoseAiBodyModel::Version2;
+
     /* the version of our hand AI.  Version 1 is our original.  Version 2 is experimental and may offer some improvments.*/
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
         EPoseAiHandModel handModelVersion = EPoseAiHandModel::Version1;
 
-    /* the model context.  Will enable new AI models as they are deployed*/
+    /* the model context. Reserved for future AI models*/
     UPROPERTY(EditAnywhere, Category = "PoseAI Handshake")
         EPoseAiContext context = EPoseAiContext::Default;
 
-    /* Not needed for PoseCam.  Used only for licensee connection and verification.*/
+    /* Not needed for PoseCam. Used only for licensee connection and verification.*/
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
         FString whoami = "";
 
-    /* Not needed for PoseCam.  Used only for licencee connection and verification.*/
+    /* Not needed for PoseCam. Used only for licencee connection and verification.*/
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
         FString signature = "";
+
+    /* Turn on demo locomotion / action recognition events. Keep off for efficiency unless testing.*/
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
+        bool locomotionEvents = false;
+
+    /* controls compactness of packet. */
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "PoseAI Handshake")
+        EPoseAiPacketFormat packetFormat = EPoseAiPacketFormat::Compact;
 
    
     bool operator==(const FPoseAIHandshake& Other) const;
@@ -111,6 +129,7 @@ struct POSEAILIVELINK_API FPoseAIHandshake
     FString GetContextString() const;
     FString GetModeString() const;
     FString GetRigString() const;
+    int32 GetBodyModelVersion() const;
     int32 GetHandModelVersion() const;
     FString ToString() const;
     FString YesNoString(bool val) const {

@@ -93,6 +93,9 @@ bool UPoseAIMovementComponent::AddSource(const FPoseAIHandshake& handshake, FStr
         UPoseAIEventDispatcher::GetDispatcher()->RegisterComponentByName(this, addedSubjectName, true);
 }
 
+FLiveLinkSubjectName UPoseAIMovementComponent::GetSubjectFaceName(){
+    return FLiveLinkSubjectName((*(FString("Face-") + subjectName.ToString())));
+}
 
 void UPoseAIMovementComponent::InitializeObjects() {
     footsteps = NewObject<UStepCounter>();
@@ -143,25 +146,29 @@ void UPoseAIMovementComponent::SetHandshake(const FPoseAIHandshake& handshake) {
 
 
 
-bool UPoseAIEventDispatcher::AddSourceNextOpenPort(const FPoseAIHandshake& handshake, bool isIPv6, int32& portNum, FString& myIP) {
+bool UPoseAIEventDispatcher::AddSourceNextOpenPort(const FPoseAIHandshake& handshake, bool isIPv6, int32& portNum, FString& myIP, FLiveLinkSubjectName& subject) {
     portNum = PoseAILiveLinkNetworkSource::portDefault;
     while (!PoseAILiveLinkNetworkSource::IsValidPort(portNum)) {
         portNum++;
         if (portNum > 49151)
             return false;
     }
-    return AddSource(handshake, myIP, portNum, isIPv6);
+    return AddSource(handshake, isIPv6, portNum, myIP, subject);
 }
 
-bool UPoseAIEventDispatcher::AddSource(const FPoseAIHandshake& handshake, FString& myIP, int32 portNum, bool isIPv6) {
-    FLiveLinkSubjectName addedSubjectName;
+bool UPoseAIEventDispatcher::AddSource(const FPoseAIHandshake& handshake, bool isIPv6, int32 portNum, FString& myIP, FLiveLinkSubjectName& subject) {
     PoseAILiveLinkServer::GetIP(myIP);
-    return PoseAILiveLinkNetworkSource::AddSource(handshake, portNum, isIPv6, addedSubjectName);
+    return PoseAILiveLinkNetworkSource::AddSource(handshake, portNum, isIPv6, subject);
 }
+
+void UPoseAIEventDispatcher::CloseSource(FLiveLinkSubjectName subject) {
+    BroadcastCloseSource(subject);
+}
+
 
 bool UPoseAIEventDispatcher::RegisterComponentByName(UPoseAIMovementComponent* component, const FLiveLinkSubjectName& name, bool siezeIfTaken) {
     UE_LOG(LogTemp, Display, TEXT("PoseAI: Event dispatcher, registering %s"), *(name.ToString()));
-
+    LastMovementComponent = component;
     UPoseAIMovementComponent* existing_component;
     if (HasComponent(name, existing_component)) {
         if (!siezeIfTaken) return false;
@@ -210,7 +217,9 @@ void UPoseAIEventDispatcher::BroadcastSubjectConnected(const FLiveLinkSubjectNam
         } else if (!componentQueue.IsEmpty()) {
             UPoseAIMovementComponent* component;
             componentQueue.Dequeue(component);
-            if (component != nullptr && IsValid(component))  component->RegisterAs(subjectName, true);
+            if (component != nullptr && IsValid(component)) {
+                component->RegisterAs(subjectName, true);
+            }
         }
         subjectConnected.Broadcast(subjectName, isReconnection);
      });

@@ -6,9 +6,6 @@
 
 
 
-FCriticalSection critSingleSectionLocal;
- 
-
 /* First use the static method to create a source and add it to the LiveLinkClient.
 *  The LiveLinkClient must own only shared pointer or UE will crash on cleanup.
 *  The client will respond with receive client when it is registered.  We return a weak ptr
@@ -51,6 +48,9 @@ void PoseAILiveLinkNativeSource::ReceiveClient(ILiveLinkClient* InClient, FGuid 
 	sourceGuid = InSourceGuid;
 	subjectKey = FLiveLinkSubjectKey(sourceGuid, subjectName);
 	liveLinkClient = InClient;
+
+	faceSubSource = TUniquePtr<PoseAILiveLinkFaceSubSource>(new PoseAILiveLinkFaceSubSource(subjectKey, liveLinkClient));
+	faceSubSource->AddSubject(InSynchObject);
 }
 
 /* 
@@ -113,6 +113,7 @@ bool PoseAILiveLinkNativeSource::RequestSourceShutdown()
 {
 	UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: PoseAILiveLinkLocalSource request source shutdown"));
 	if (liveLinkClient) {
+		faceSubSource->RequestSubSourceShutdown();
 		liveLinkClient->RemoveSubject_AnyThread(subjectKey);
 		liveLinkClient->RemoveSource(sourceGuid);
 		liveLinkClient = nullptr;
@@ -150,7 +151,8 @@ void PoseAILiveLinkNativeSource::UpdatePose(TSharedPtr<FJsonObject> jsonPose)
 		if (rig->ProcessFrame(jsonPose, data)) {
 			liveLinkClient->PushSubjectFrameData_AnyThread(subjectKey, MoveTemp(frameData));
 			UPoseAIEventDispatcher::GetDispatcher()->BroadcastFrameReceived(subjectKey.SubjectName);
-
+			faceSubSource->UpdateFace(jsonPose);
 		}
 	}
 }
+

@@ -141,6 +141,10 @@ class POSEAILIVELINK_API UPoseAIMovementComponent : public UActorComponent
      UFUNCTION(BlueprintCallable, BlueprintPure, Category = "PoseAI Setup")
      FLiveLinkSubjectName GetSubjectName() { return subjectName; }
 
+     /** Get the LiveLink subject name for facial animation associated with this component */
+     UFUNCTION(BlueprintCallable, BlueprintPure, Category = "PoseAI Setup")
+         FLiveLinkSubjectName GetSubjectFaceName();
+
      /** Will assign component to the next available Pose AI LiveLink source.  Useful if sources managed with a preswet (Otherwise prefer use of AddSource nodes) */
      UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
      void RegisterAsFirstAvailable();
@@ -268,6 +272,8 @@ class POSEAILIVELINK_API UPoseAIMovementComponent : public UActorComponent
 
 private:
     FLiveLinkSubjectName subjectName;
+    FLiveLinkSubjectName subjectFaceName;
+
     void InitializeObjects();
 
 };
@@ -303,15 +309,21 @@ public:
 
     /** Adds a LiveLink source listening for Posecam at the designated port, but will overwrite an existing listener so developer needs to manage if using multiple ports (or use the AddSourceNextOpenPort node instead)*/
     UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
-    bool AddSource(const FPoseAIHandshake& handshake, FString& myIP, int32 portNum = 8080, bool isIPv6 = false);
+    bool AddSource(const FPoseAIHandshake& handshake, bool isIPv6, int32 portNum, FString& myIP, FLiveLinkSubjectName& subject);
 
     /** Adds a LiveLink source listening for Posecam at the next open port beginning at 8080*/
     UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
-    bool AddSourceNextOpenPort(const FPoseAIHandshake& handshake, bool isIPv6, int32& portNum, FString& myIP);
+    bool AddSourceNextOpenPort(const FPoseAIHandshake& handshake, bool isIPv6, int32& portNum, FString& myIP, FLiveLinkSubjectName& subject);
 
+    UFUNCTION(BlueprintCallable, Category = "PoseAI Setup")
+    void CloseSource(FLiveLinkSubjectName subject);
 
     UFUNCTION(BlueprintCallable, Category = "PoseAI Events")
      FLiveLinkSubjectName GetFirstUnboundSubject(bool excludeIdleSubjects = true);
+
+    /** convenience accessor for animation blueprints in one source projects, but no guarantee reference is valid or preserve. Use a proper link between ABP and BP to refer in a more stable manner */
+    UPROPERTY(BlueprintReadOnly, Category = "PoseAI Setup")
+     UPoseAIMovementComponent* LastMovementComponent;
 
     UPROPERTY(BlueprintAssignable, Category = "PoseAI Events")
     FPoseAISubjectConnected subjectConnected;

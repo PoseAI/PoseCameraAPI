@@ -19,7 +19,7 @@
 #include "PoseAIRig.h"
 #include "PoseAILiveLinkServer.h"
 #include "PoseAIStructs.h"
-
+#include "PoseAILiveLinkFaceSubSource.h"
 
 #define LOCTEXT_NAMESPACE "PoseAI"
 
@@ -102,9 +102,10 @@ private:
 	int32 port;
 	FGuid sourceGuid ;
 	FLiveLinkSubjectKey subjectKey;
-
+	TUniquePtr<PoseAILiveLinkFaceSubSource> faceSubSource;
 	mutable FText status;
-    
+	FCriticalSection InSynchObject;
+
 	void AddSubject();
 
 };

@@ -4,7 +4,6 @@
 #include "Features/IModularFeatures.h"
 #include "PoseAIEventDispatcher.h"
 
-FCriticalSection critSingleSection;
 
  
 /*
@@ -89,6 +88,9 @@ void PoseAILiveLinkNetworkSource::ReceiveClient(ILiveLinkClient* InClient, FGuid
 	liveLinkClient = InClient;
 
 	AddSubject();
+	faceSubSource = TUniquePtr<PoseAILiveLinkFaceSubSource>(new PoseAILiveLinkFaceSubSource(subjectKey, liveLinkClient));
+	faceSubSource->AddSubject(InSynchObject);
+
 }
 
 /* 
@@ -119,7 +121,7 @@ void PoseAILiveLinkNetworkSource::AddSubject(){
 	subject.Settings = nullptr;
 	subject.VirtualSubject = nullptr;
 	
-	critSingleSection.Lock();
+	FScopeLock ScopeLock(&InSynchObject);
 	if (!liveLinkClient->CreateSubject(subject)) {
 		UE_LOG(LogTemp, Warning, TEXT("PoseAI LiveLink: unable to create subject %s"), *(subjectKey.SubjectName.Name.ToString()));
 	}
@@ -128,7 +130,6 @@ void PoseAILiveLinkNetworkSource::AddSubject(){
 		FLiveLinkStaticDataStruct rigDefinition = rig->MakeStaticData();
 		liveLinkClient->PushSubjectStaticData_AnyThread(subject.Key, ULiveLinkAnimationRole::StaticClass(), MoveTemp(rigDefinition));
 	}
-	critSingleSection.Unlock();
 }
 
 
@@ -145,6 +146,7 @@ void PoseAILiveLinkNetworkSource::UpdatePose(TSharedPtr<FJsonObject> jsonPose)
 	data.Transforms.Reserve(100);
 	if (rig->ProcessFrame(jsonPose, data)) {
 		liveLinkClient->PushSubjectFrameData_AnyThread(subjectKey, MoveTemp(frameData));
+		faceSubSource->UpdateFace(jsonPose);
 	}
 	else {
 		static const FName NAME_JsonError = "PoseAILiveLink_ProcessFrameError";
@@ -212,6 +214,7 @@ bool PoseAILiveLinkNetworkSource::RequestSourceShutdown()
 	usedPorts.Remove(port);
 	UE_LOG(LogTemp, Display, TEXT("PoseAI LiveLink: PoseAILiveLinkNetworkSource on port %d closed"), port);
 	if (liveLinkClient != nullptr) {
+		faceSubSource->RequestSubSourceShutdown();
 		liveLinkClient->RemoveSubject_AnyThread(subjectKey);
 		liveLinkClient->RemoveSource(sourceGuid);
 		liveLinkClient = nullptr;

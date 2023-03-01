@@ -18,6 +18,7 @@
 #include "Json.h"
 #include "PoseAIRig.h"
 #include "PoseAIStructs.h"
+#include "PoseAILiveLinkFaceSubSource.h"
 
 #define LOCTEXT_NAMESPACE "PoseAI"
 
@@ -72,6 +73,8 @@ private:
 	ILiveLinkClient* liveLinkClient = nullptr;
 	FCriticalSection InSynchObject;
 	FPoseAIHandshake handshake;
+	TUniquePtr<PoseAILiveLinkFaceSubSource> faceSubSource;
+
 	mutable FText status;
 	
 };

@@ -85,6 +85,10 @@ int32 FPoseAIHandshake::GetHandModelVersion() const {
     return static_cast<int>(handModelVersion) + 1;
 }
 
+int32 FPoseAIHandshake::GetBodyModelVersion() const {
+    return static_cast<int>(bodyModelVersion) + 2;
+}
+
 FString FPoseAIHandshake::GetModeString() const {
     switch (mode) {
         case EPoseAiAppModes::Room: return "Room";
@@ -101,6 +105,7 @@ FString FPoseAIHandshake::GetRigString() const {
     case EPoseAiRigPresets::MetaHuman: return "MetaHuman";
     case EPoseAiRigPresets::UE4: return "UE4";
     case EPoseAiRigPresets::Mixamo: return "Mixamo";
+    case EPoseAiRigPresets::MixamoAlt: return "MixamoAlt";
     case EPoseAiRigPresets::DazUE: return "DazUE";
     default:
         return "MetaHuman";
@@ -117,24 +122,30 @@ FString FPoseAIHandshake::ToString() const {
             "\"name\":\"Unreal LiveLink\","
             "\"rig\":\"%s\", "
             "\"mode\":\"%s\", "
+            "\"face\":\"%s\", "
             "\"context\":\"%s\", "
             "\"whoami\":\"%s\", "
             "\"signature\":\"%s\", "
             "\"mirror\":\"%s\", "
             "\"syncFPS\": %d, "
             "\"cameraFPS\": %d, "
+            "\"modelVersion\": %d, "
             "\"handModelVersion\": %d, "
+            "\"locomotion\":\"%s\", "
             "\"packetFormat\": %d"
             "}}"),
         *(GetRigString()),
         *(GetModeString()),
+        *(YesNoString(isFaceAnimating)),
         *(GetContextString()),
         *whoami,
         *signature,
         *(YesNoString(isMirrored)),
         syncFPS,
         cameraFPS,
+        GetBodyModelVersion(),
         GetHandModelVersion(),
+        *(YesNoString(locomotionEvents)),
         static_cast<int>(packetFormat)
     );
 }
