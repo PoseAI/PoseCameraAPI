@@ -27,7 +27,7 @@ namespace PoseAI
          * 3. either a new port for a new source, or an exsiting PoseAISource (i.e. if player is already connected and we are animating a new character or scene).
          * 4. optionally pass in a different animation controller if you want to use different animation controllers in different parts of the game
          */
-        public static bool RuntimeLoad(GameObject gameCharacter, Avatar avatar, int port = 0, PoseAISourceDirect poseAISourceIn = null, RuntimeAnimatorController animationController = null)
+        public static bool RuntimeLoad(GameObject gameCharacter, Avatar avatar, int port = 0, PoseAISourceNetwork poseAISourceIn = null, RuntimeAnimatorController animationController = null)
         {
             Debug.Assert(poseAISourceIn != null || port != 0);
 
@@ -76,9 +76,9 @@ namespace PoseAI
             }
             else
             {
-                PoseAISourceDirect poseAISourceDirect = gameCharacter.GetComponent<PoseAISourceDirect>();
+                PoseAISourceNetwork poseAISourceDirect = gameCharacter.GetComponent<PoseAISourceNetwork>();
                 if (poseAISourceDirect == null)
-                    poseAISourceDirect = gameCharacter.AddComponent<PoseAISourceDirect>() as PoseAISourceDirect;
+                    poseAISourceDirect = gameCharacter.AddComponent<PoseAISourceNetwork>() as PoseAISourceNetwork;
                 poseAISourceDirect.Mode = PoseAI_Modes.Room;
                 poseAISourceDirect.RigType = rigType;
                 poseAISourceDirect.Port = port;
@@ -94,8 +94,7 @@ namespace PoseAI
                 poseAICharacterAnimator = gameCharacter.AddComponent<PoseAICharacterAnimator>() as PoseAICharacterAnimator;
             poseAICharacterAnimator.SetSource(poseAISource);
             poseAICharacterAnimator.SetRemapping(Remapping);
-            poseAICharacterAnimator.OverrideRootName = "";
-            poseAICharacterAnimator.JointNamePrefix = "";
+            poseAICharacterAnimator.OverridePelvisName = "";
 
             PoseAICharacterController poseAICharacterController = gameCharacter.GetComponent<PoseAICharacterController>();
             if (poseAICharacterController == null)
@@ -139,7 +138,7 @@ namespace PoseAI
 
         public void EnableOrDisablePoseAI(GameObject gameCharacter, bool enabled)
         {
-            PoseAISourceDirect poseAISource = gameCharacter.GetComponent<PoseAISourceDirect>();
+            PoseAISourceNetwork poseAISource = gameCharacter.GetComponent<PoseAISourceNetwork>();
             if (poseAISource != null)
                 poseAISource.enabled = enabled;
 
@@ -183,13 +182,27 @@ namespace PoseAI
             return firstByte[CharToInt(a)] + secondByte[CharToInt(b)];
         }
 
-        public static void FStringFixed12ToFloat(ref string data, ref List<float> flatArray)
+        public static void FStringFixed12ToFloatInPlace(ref string data, ref List<float> flatArray)
         {
+            for (int i = 0; i < data.Length - 1; i += 2)
+                flatArray[i/2] = FixedB64pairToFloat(data[i], data[i + 1]);
+        }
+        public static void FStringFixed12ToFloat(ref string data, ref List<float> flatArray, bool clearFirst=false)
+        {
+            if (clearFirst)
+                flatArray.Clear();
             flatArray.Capacity = flatArray.Count + data.Length / 2;
             for (int i = 0; i < data.Length - 1; i += 2)
                 flatArray.Add(FixedB64pairToFloat(data[i], data[i + 1]));
         }
-
+        public static void FStringFixed12ToFloat(string data, ref List<float> flatArray, float scale=1.0f, bool clearFirst = false)
+        {
+            if (clearFirst)
+                flatArray.Clear();
+            flatArray.Capacity = flatArray.Count + data.Length / 2;
+            for (int i = 0; i < data.Length - 1; i += 2)
+                flatArray.Add(FixedB64pairToFloat(data[i], data[i + 1]) * scale);
+        }
         public static void FStringFixed12ToFloat(ref string data, ref List<float?> flatArray)
         {
             flatArray.Capacity = flatArray.Count + data.Length / 2;
@@ -214,6 +227,15 @@ namespace PoseAI
                 quatArray.Add(quat);
             }
                 
+        }
+
+        public static Vector3 FStringFixed12ToVector3(ref string data)
+        {
+            if (data.Length < 6)
+                return Vector3.zero;
+            else
+                return new Vector3(FixedB64pairToFloat(data[0], data[1]), FixedB64pairToFloat(data[2], data[3]), FixedB64pairToFloat(data[4], data[5]));
+            
         }
     }
 

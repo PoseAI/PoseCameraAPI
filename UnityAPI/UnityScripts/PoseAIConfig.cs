@@ -15,15 +15,30 @@ namespace PoseAI
 
     }
 
-    public enum PoseAI_Modes { Room, Desktop, Portrait, RoomBodyOnly, PortraitBodyOnly };
-    public enum PoseAI_Rigs { Unity, UE4, Mixamo };
+    public enum PoseAI_Modes { Room, SeatedAtDesk, Portrait, RoomBodyOnly, PortraitBodyOnly };
+    public enum PoseAI_Rigs { Unity, UE4, Mixamo, MixamoAlt, MetaHuman };
     public enum PoseAI_Gestures {None,
         Swipe1, Swipe2, Swipe3, Swipe4, Swipe6, Swipe7, Swipe8, Swipe9,
         FlapLateral, Flap, WaxOn, WaxOff, OverheadClapSmall, OverheadClap, ReverseOverheadClap};
     public enum TouchState { Begun, Touching, Ended, Cancelled};
+    
+    public enum PoseAI_CameraQuality {VGA, _360p, _720p, _1080p, QHD, _4K}
+
     public static class PoseAI_Methods
     {
-
+        public static Resolution Resolution(PoseAI_CameraQuality quality)
+        {
+            switch (quality)
+            {
+                case PoseAI_CameraQuality.VGA: return new Resolution { width= 480, height = 640 };
+                case PoseAI_CameraQuality._360p: return new Resolution { width = 360, height = 640 };
+                case PoseAI_CameraQuality._720p: return new Resolution { width = 1280, height = 720 };
+                case PoseAI_CameraQuality._1080p: return new Resolution { width = 1920, height = 1080 };
+                case PoseAI_CameraQuality.QHD: return new Resolution { width = 2560, height = 1440 };
+                case PoseAI_CameraQuality._4K: return new Resolution { width = 3840, height = 2160 };
+                default: return new Resolution { width = 480, height = 640 };
+            }
+        }
         public static PoseAI_Gestures Gesture(this uint s1)
         {
             switch (s1)
@@ -49,9 +64,9 @@ namespace PoseAI
         }
 
     
-        public static bool IsDesktop(PoseAI_Modes mode) => mode switch
+        public static bool IsSeatedAtDesk(PoseAI_Modes mode) => mode switch
         {
-            PoseAI_Modes.Desktop => true,
+            PoseAI_Modes.SeatedAtDesk => true,
             _ => false
         };
     }

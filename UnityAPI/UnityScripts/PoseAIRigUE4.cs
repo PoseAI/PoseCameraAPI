@@ -112,9 +112,16 @@ namespace PoseAI
             numOfBodyJoints = Body.Rotations.NumOfJoints();
             numOfLeftHandJoints = LeftHand.Rotations.NumOfJoints();
             numOfRightHandJoints = RightHand.Rotations.NumOfJoints();
-    }
-
-    public override BaseBodyWrapper GetBody()
+        }
+        public override Dictionary<int, string> GetExtraBones()
+        {
+            return new()
+            {
+                { 21, "lowerarm_twist_01_l" },
+                { 38, "lowerarm_twist_01_r" },
+            };
+        }
+        public override BaseBodyWrapper GetBody()
         {
             return Body;
         }

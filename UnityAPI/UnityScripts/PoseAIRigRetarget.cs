@@ -16,8 +16,8 @@ namespace PoseAI
 
     [RequireComponent(typeof(Animator))]
     public class PoseAIRigRetarget : MonoBehaviour
-    {     
-        
+    {
+
         [Tooltip("Character animator from a standard rig.")]
         public Animator OtherAnimator;
 
@@ -38,19 +38,24 @@ namespace PoseAI
                 String mapName = OtherAnimator.name + "_to_" + animator.name;
 
                 String pasteText = " {\"" + mapName + "\", new List<Quaternion> {";
-                foreach (var bone in PoseAIRigBase.bones)
+                foreach (var bone in (new PoseAIRigUnity()).GetBones())
                 {
                     Quaternion relativeRotation;
                     if (bone == HumanBodyBones.LastBone)
                     {
                         relativeRotation = Quaternion.identity;
                     }
-                    else
+                    else if (animator.GetBoneTransform(bone) != null && OtherAnimator.GetBoneTransform(bone) != null)
                     {
                         var myRotation = animator.GetBoneTransform(bone).rotation;
                         var otherRotation = OtherAnimator.GetBoneTransform(bone).rotation;
                         relativeRotation = Quaternion.Inverse(otherRotation) * myRotation;
+                    } else
+                    {
+                        Debug.LogWarning("Missing " + bone.ToString());
+                        relativeRotation = rotations[rotations.Count-1];
                     }
+
                     rotations.Add(relativeRotation);
                     pasteText += "new Quaternion(" + relativeRotation.x + "f," + relativeRotation.y + "f," + relativeRotation.z + "f," + relativeRotation.w + "f),";
                 }

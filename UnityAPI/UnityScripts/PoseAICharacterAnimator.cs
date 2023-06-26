@@ -1,9 +1,8 @@
-// Copyright 2021 Pose AI Ltd. All rights reserved
+// Copyright 2021-2023 Pose AI Ltd. All rights reserved
 
 using UnityEngine;
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 
 
 namespace PoseAI
@@ -16,48 +15,79 @@ namespace PoseAI
     [RequireComponent(typeof(Animator))]
     [RequireComponent(typeof(PoseAISource))]
     public class PoseAICharacterAnimator : MonoBehaviour
-    {     
+    {
         [Tooltip("Animation weighting for Pose Camera vs normal animation (0.0-1.0)")]
         public float AnimationAlpha = 1.0f;
 
+
+        [Header("Facial rig")]
+        [Tooltip("Facial mesh to apply blendshapes.")]
+        public SkinnedMeshRenderer FaceMesh;
+
+        [Tooltip("Eye mesh transform for applying gaze direction blendshapes.")]
+        public Transform LeftEye;
+
+        [Tooltip("Eye mesh transform for applying gaze direction blendshapes.")]
+        public Transform RightEye;
+
+
+        [Header("Motion control")]
+
+        [Tooltip("Approx height of avatar.  Scales lateral/vertical movement.")]
+        public float RigHeight = 1.8f;
+
+        [Tooltip("Moves pelvis laterally/vertically based on player motion (if using full body animation)")]
+        public Vector3 ScaleRootMotion = new(1.0f, 1.0f, 1.0f);
+
+        [Tooltip("Whether to keep avatar in contact with ground")]
+        public bool PinToFloor = true;
+
+
+        [Header("Configuration")]
         [Tooltip("Whether to only use upper body rotations")]
         public bool UseUpperBodyOnly = true;
-        
-        [Tooltip("Moves root for sideways movement in camera frame, if using full body animation")]
-        public bool MoveRootSideways = false;
 
-        [Tooltip("Approx height of rig from ankle to head.  Scales lateral/vertical movement.")]
-        public float RigHeight = 1.6f;
-        
-        [Tooltip("Use only if rig has a prefix before all bone names (i.e. mixamorig1: if the root is at mixamorig1:Hips)")]
-        public string JointNamePrefix = "";
-
-        [Tooltip("Use to override the default rootname if the rig has a different root than standard")]
-        public string OverrideRootName = "";
+        [Tooltip("Use to override the default hip/pelvis if the rig has a different hip/pelvis than standard")]
+        public string OverridePelvisName = "";
 
         [Tooltip("Use only if you have set up a custom joint-by-joint remapping array (for non-standard rig configurations)")]
         public string Remapping = "";
 
+        [Tooltip("Use extra joints not included in humanoid avatar (like twist), if found on rig, in LateUpdate")]
+        public bool UseExtraJoints = true;
+
+
         private Animator _animator;
         private PoseAISource _source;
-        private Transform _rootJoint;
-        private Vector3 _smoothedRootTranslation = Vector3.zero; 
+        private Transform _pelvisJoint;
+        private Vector3 _smoothedRootTranslation = Vector3.zero;
         private float idleAlpha = 1.0f;
-        private List<String> _jointNames = new List<String>();
         private List<Quaternion> _remapping = null;
-
+        private List<PoseAIAnimationSocket> _penetrationSockets = new();
         private PoseAIRigBase _rigObj;
-
+        private Vector3 _preIKPelvisLocalPosition;
+        private Dictionary<int, Transform> _extraJoints = new();
+        
         public void SetSource(PoseAISource source)
         {
             _source = source;
             if (_source != null)
             {
                 _rigObj = source.GetRig();
-                string rootName = OverrideRootName != "" ? OverrideRootName : JointNamePrefix + _rigObj.GetRootName()  ;
-                _rootJoint = FindJointTransformRecursive(transform, rootName, skipToChildren: true);
-                if (_rootJoint == null)
-                    Debug.Log("Did not find rootjoint in " + transform.name + ".  Try overriding with correct name in editor.");
+                string rootName = OverridePelvisName != "" ? OverridePelvisName : _rigObj.GetRootName();
+                _pelvisJoint = FindJointTransformRecursive(transform, rootName, skipToChildren: true, canBeEnding: false);
+                if (_pelvisJoint == null)
+                    Debug.LogWarning("Did not find rootjoint in " + transform.name + ".  Try overriding with correct name in editor.");
+                else
+                {
+                    _penetrationSockets = new List<PoseAIAnimationSocket>(_pelvisJoint.GetComponentsInChildren<PoseAIAnimationSocket>());
+                    
+                    // find if any extra joints match with rig joints for supplementary animation.
+                    foreach (KeyValuePair<int, string> entry in _rigObj.GetExtraBones())
+                    {
+                        _extraJoints.Add(entry.Key, FindJointTransformRecursive(_pelvisJoint, entry.Value, true));
+                    }
+                }
             }
         }
 
@@ -73,25 +103,30 @@ namespace PoseAI
                 }
                 else
                 {
-                    Debug.Log("Could not find an existing remapping named " + Remapping);
+                    Debug.LogWarning("Could not find an existing remapping named " + Remapping);
                 }
             }
+            
         }
 
-        private void Start(){
+
+        private void Start()
+        {
             _animator = GetComponent<Animator>();
             SetSource(GetComponent<PoseAISource>());
             if (_source == null)
-                Debug.Log("Missing source for PoseAI CharacterAnimator in "  + transform.root.gameObject.name.ToString());
+                Debug.LogError("Missing source for PoseAI CharacterAnimator in " + transform.root.gameObject.name.ToString());
             SetRemapping(Remapping);
         }
-               
+
         void OnAnimatorIK()
         {
+            
             float useAlpha = AnimationAlpha * Mathf.Clamp(idleAlpha, 0.0f, 1.0f);
             if (useAlpha > 0.0f && CheckValidRig())
             {
-                var bones = PoseAIRigBase.bones;
+                var bones = _rigObj.GetBones();
+                _preIKPelvisLocalPosition = _animator.GetBoneTransform(bones[0]).transform.position - _animator.GetBoneTransform(bones[0]).transform.parent.transform.position;
                 Tuple<List<bool>, List<Quaternion>> rotationTuple = _rigObj.GetRotationsCameraSpace();
                 List<bool> validity = rotationTuple.Item1;
                 List<Quaternion> rotations = rotationTuple.Item2;
@@ -99,8 +134,9 @@ namespace PoseAI
 
                 if (UseUpperBodyOnly)
                 {
-                     startAt = 9;
-                } else
+                    startAt = 9;
+                }
+                else
                 {
                     if (_remapping != null)
                     {
@@ -108,57 +144,121 @@ namespace PoseAI
                     }
                     else
                     {
-                        SetBone(bones[0], _rigObj.GetBaseRotation() * rotations[0], useAlpha);
+                        SetBone(bones[0],_rigObj.GetBaseRotation() * rotations[0], useAlpha);
                     }
                     startAt = 1;
                 }
-               
+                var parentIndices = _rigObj.GetParentIndices();
                 for (int j = startAt; j < rotations.Count; ++j)
                 {
-                    var p = PoseAIRigBase.parentIndices[j];
+                    var p = parentIndices[j];
                     var bone = bones[j];
+
                     if (bone != HumanBodyBones.LastBone && validity[j] && validity[p])
                     {
                         if (_remapping != null)
                         {
                             SetBone(bone, Quaternion.Inverse(rotations[p] * _remapping[p]) * rotations[j] * _remapping[j], useAlpha);
-                        } else
+                        }
+                        else
                         {
                             SetBone(bone, Quaternion.Inverse(rotations[p]) * rotations[j], useAlpha);
                         }
-                        
                     } 
                 }
-            } 
+            }
+           
         }
 
         void LateUpdate()
         {
-            if (AnimationAlpha > 0.0f & !UseUpperBodyOnly && CheckValidRig())
+            if (AnimationAlpha > 0.0f && !UseUpperBodyOnly && CheckValidRig())
                 AdjustRootLocation();
+            float useAlpha = AnimationAlpha * Mathf.Clamp(idleAlpha, 0.0f, 1.0f);
+            if (UseExtraJoints && useAlpha > 0.0f && CheckValidRig())
+                AnimateExtraJoints();
+        }
+
+        void AnimateExtraJoints()
+        {
+            Tuple<List<bool>, List<Quaternion>> rotationTuple = _rigObj.GetRotationsCameraSpace();
+            List<bool> validity = rotationTuple.Item1;
+            List<Quaternion> rotations = rotationTuple.Item2;
+            var parentIndices = _rigObj.GetParentIndices();
+            foreach (KeyValuePair<int, Transform> entry in _extraJoints)
+            {
+
+                var j = entry.Key;
+                if (UseUpperBodyOnly && j < 9) // note 9 may not be the number of lower joints in a custom schedule so this may need to be altered
+                    continue;
+                var p = parentIndices[j];
+                var boneTransform = entry.Value;
+                if (_remapping != null)
+                {
+                    boneTransform.localRotation = Quaternion.Slerp(boneTransform.localRotation, Quaternion.Inverse(rotations[p] * _remapping[p]) * rotations[j] * _remapping[j], AnimationAlpha);
+                }
+                else
+                {
+                    boneTransform.localRotation = Quaternion.Slerp(boneTransform.localRotation, Quaternion.Inverse(rotations[p]) * rotations[j], AnimationAlpha);
+                }
+            }
         }
 
         void Update()
         {
-            if (CheckValidRig())
+            UpdateFaceMesh();   
+        }
+
+      
+        private void UpdateFaceMesh()
+        {
+            if (FaceMesh != null && _rigObj != null)
             {
-                // smoothly transition to (over 1 second) and away (over 2 seconds) from pose cam animations if torso is not visible.  Clamp above 1 to provide a few milliseconds before fade begins  
-                idleAlpha = Mathf.Clamp(idleAlpha + Time.deltaTime * ((_rigObj.visibility.isTorso) ? 1.0f : -0.5f ), 0.0f, 1.1f);
+                List<float> blendshapes = PoseAIFaceBlendShapeReorder.ReorderBlendshapes(ref _rigObj.blendshapes);
+                for (int f = 0; f < blendshapes.Count; f++)
+                {
+                    FaceMesh.SetBlendShapeWeight(f, blendshapes[f] * 100.0f); //scale by 100 as Unity uses 0-100 and we predict 0.0-1.0
+                }
+                float kScaleEye = 20.0f; // +- degrees for movement, multiplied by blenshape difference ranges from -1 to 1.
+
+                float DownUpL = _rigObj.blendshapes[(int)PoseAIFaceBlendShapeReorder.PoseAIFaceBlendShapes.EyeLookDownLeft] -
+                                _rigObj.blendshapes[(int)PoseAIFaceBlendShapeReorder.PoseAIFaceBlendShapes.EyeLookUpLeft];
+
+                float DownUpR = _rigObj.blendshapes[(int)PoseAIFaceBlendShapeReorder.PoseAIFaceBlendShapes.EyeLookDownRight] -
+                                 _rigObj.blendshapes[(int)PoseAIFaceBlendShapeReorder.PoseAIFaceBlendShapes.EyeLookUpRight];
+
+                // averaging ensures eyes will move up/down together which is "normal" behavior. We still allow cross eyes (independent inout)
+                float DownUp = 0.5f * (DownUpL + DownUpR); 
+
+                if (LeftEye != null)
+                {
+                    float InOut = _rigObj.blendshapes[(int)PoseAIFaceBlendShapeReorder.PoseAIFaceBlendShapes.EyeLookInLeft] -
+                                _rigObj.blendshapes[(int)PoseAIFaceBlendShapeReorder.PoseAIFaceBlendShapes.EyeLookOutLeft];
+                    LeftEye.localRotation = Quaternion.Euler(DownUp * kScaleEye, InOut * kScaleEye, 0.0f);
+                }
+                if (RightEye != null)
+                {
+                    float InOut = _rigObj.blendshapes[(int)PoseAIFaceBlendShapeReorder.PoseAIFaceBlendShapes.EyeLookInRight] -
+                                _rigObj.blendshapes[(int)PoseAIFaceBlendShapeReorder.PoseAIFaceBlendShapes.EyeLookOutRight];
+
+                    RightEye.localRotation = Quaternion.Euler(DownUp * kScaleEye, -InOut * kScaleEye, 0.0f);
+                }
+
             }
         }
 
         private bool CheckValidRig()
         {
-            return (_source != null && 
+            return (_source != null &&
                     _animator != null &&
                     _animator.runtimeAnimatorController != null &&
                     _rigObj != null &&
-                    _rootJoint != null &&
+                    _pelvisJoint != null &&
                     _rigObj.HasRigInfo());
         }
 
         private void SetBone(HumanBodyBones bone, Quaternion target, float alpha)
-        {         
+        {
             if (alpha < 1.0f)
                 target = Quaternion.Slerp(_animator.GetBoneTransform(bone).localRotation, target, alpha);
             _animator.SetBoneLocalRotation(bone, target);
@@ -172,52 +272,61 @@ namespace PoseAI
         */
         private void AdjustRootLocation()
         {
-            var scaBody = _rigObj.GetBody().Scalars;
-            var vecBody = _rigObj.GetBody().Vectors;
-            var vis = _rigObj.visibility;
 
-            var targetTranslation = new Vector3(0.0f, GetBonePenetration(), 0.0f);
-            if (vis.isTorso && scaBody.BodyHeight > 0.0f)
-                targetTranslation.x = vecBody.HipScreen[0] * RigHeight / scaBody.BodyHeight * AnimationAlpha * idleAlpha;
-
-            // smooths translation
-            float alpha = Mathf.Clamp(Time.deltaTime * 4.0f, 0.1f, 1.0f);
-            _smoothedRootTranslation = Vector3.Lerp(_smoothedRootTranslation, targetTranslation, alpha);
-            _rootJoint.localPosition += _smoothedRootTranslation;
+            float[] hip = new float[3];
+            _rigObj.GetBody().Vectors.Hip.CopyTo(hip);
+            Vector3 targetTranslation = new(-hip[0] * ScaleRootMotion.x, hip[2] * ScaleRootMotion.y, hip[1] * ScaleRootMotion.z);
+            targetTranslation = targetTranslation * RigHeight + _preIKPelvisLocalPosition;
+            
+            //makes sure nw part of the character goes below the parent of the pelvis (root or player object)
+            float bone_penetration = GetBonePenetration();
+            if (PinToFloor || bone_penetration > 0.0f)
+                targetTranslation.y = bone_penetration;
+            // could be used to additionally smooth translation, although our engine already does some
+            float alpha = 1.0f; // Mathf.Clamp(Time.deltaTime * 10.0f, 0.1f, 1.0f);
+            _smoothedRootTranslation =  Vector3.Lerp(_smoothedRootTranslation, targetTranslation, alpha);
+            _pelvisJoint.localPosition += _smoothedRootTranslation;
+           
         }
 
         /* calculates lowest Y relative to component space. */
         private float GetBonePenetration()
         {
             float minY = float.MaxValue;
-            MethodInfo methodGetAxisLength = typeof(Avatar).GetMethod("GetAxisLength", BindingFlags.Instance | BindingFlags.NonPublic);
-            if (methodGetAxisLength != null)
-            {
-                float ltoes = (float)methodGetAxisLength.Invoke(_animator.avatar, new object[] { HumanBodyBones.LeftToes });
-                float rtoes = (float)methodGetAxisLength.Invoke(_animator.avatar, new object[] { HumanBodyBones.RightToes });
-                var lt = _animator.GetBoneTransform(HumanBodyBones.LeftToes);
-                var rt = _animator.GetBoneTransform(HumanBodyBones.RightToes);
 
-                minY = Mathf.Min(
-                    lt.position.y - (lt.rotation * new Vector3(0, ltoes, 0)).y,
-                    rt.position.y - (rt.rotation * new Vector3(0, rtoes, 0)).y
-                );
-            }
-
-            foreach (var bone in PoseAIRigBase.bones)
+            foreach (var bone in _rigObj.GetBones())
             {
                 if (bone != HumanBodyBones.LastBone)
                 {
-                    minY = Mathf.Min(minY, _animator.GetBoneTransform(bone).position.y);
+                    var bt = _animator.GetBoneTransform(bone);
+                    if (bt != null)
+                    {
+                        minY = Mathf.Min(minY, bt.position.y);
+                    }
                 }
             }
-            float componentY =  _rootJoint.parent.position.y;
+            // also checks any penetration sockets added to avatar for better foot placement
+            foreach (var socket in _penetrationSockets)
+            {
+                var bt = _animator.GetBoneTransform(socket.bone);
+                if (bt != null)
+                {
+                    minY = Mathf.Min(minY, bt.TransformPoint(socket.transform.localPosition).y);
+                }
+                    
+            }
+
+            float componentY = _pelvisJoint.parent.position.y;
             return componentY - minY;
         }
 
-        private static Transform FindJointTransformRecursive(Transform parent, string name, bool skipToChildren = false)
+        private static Transform FindJointTransformRecursive(Transform parent, string name, bool skipToChildren = false, bool canBeEnding=true)
         {
             if (!skipToChildren && string.Equals(parent.name, name, StringComparison.InvariantCultureIgnoreCase))
+            {
+                return parent;
+            }
+            if (!skipToChildren && canBeEnding &&  parent.name.EndsWith(name, StringComparison.InvariantCultureIgnoreCase))
             {
                 return parent;
             }

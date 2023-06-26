@@ -1,0 +1,13 @@
+Keeping a note here of the main differences between UE5 vs UE4 version builds for quick conversion. 
+TBD: Can we do this with compiler defines that the build system recognizes and avoid having 4 versions of the plugin?
+
+PoseAiMediaFramework.cpp
+The UPoseAIMediaComponent::TickComponent method generates a FMediaTextureResource.  In UE4 this was MediaTexture->Resource, in UE5 MediaTexture->GetResource()
+
+PoseAIUdpSocketReceiver.h
+In Update method, in 4.0 we use UTF8_TO_TChar to make the FString (not as safe as desired, has been crash prone in past), in 5.0 we use a newer (and safer) FString constructer.
+
+PoseAILiveLinkBuild.cs
+UE5 requires LiveLinkAnimationCore in PublicDependencies.  Inclusion is automatically handled with code.
+
+  

@@ -10,10 +10,17 @@ namespace PoseAI
      * PoseAICharacterController and PoseAIAnimator.  Create a direct source elsewhere
      * and then drag into this component.
      */
+    public abstract class PoseAISource : MonoBehaviour
+    {
+        virtual public PoseAIRigBase GetRig()
+        {
+            return null;
+        }
+    }
     public class PoseAISourceShared : PoseAISource
     {
         [Tooltip("Specify a direct source created elsewhere.")]
-        public PoseAISourceDirect Source;
+        public PoseAISource Source;
         public override PoseAIRigBase GetRig()
         {
             return Source.GetRig();

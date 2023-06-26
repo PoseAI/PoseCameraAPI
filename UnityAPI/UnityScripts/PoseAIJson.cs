@@ -1,4 +1,4 @@
-// Copyright 2021 Pose AI Ltd. All rights reserved
+// Copyright 2021-2023 Pose AI Ltd. All rights reserved
 
 using UnityEngine;
 using System.Collections.Generic;
@@ -10,6 +10,7 @@ using System;
 
 namespace PoseAI
 {
+
     public static class PoseAIRigFactory
     {
         public static PoseAIRigBase SelectRig(PoseAI_Rigs rigType) => rigType switch
@@ -17,6 +18,8 @@ namespace PoseAI
             PoseAI_Rigs.Unity => new PoseAIRigUnity(),
             PoseAI_Rigs.UE4 => new PoseAIRigUE4(),
             PoseAI_Rigs.Mixamo => new PoseAIRigMixamo(),
+            PoseAI_Rigs.MixamoAlt => new PoseAIRigMixamo(),
+            PoseAI_Rigs.MetaHuman => new PoseAIRigMetaHuman(),
             _ => new PoseAIRigUnity()
         };
     }
@@ -32,6 +35,7 @@ namespace PoseAI
             public string rig;
             public string mode;
             public string mirror;
+            public string face;
             public int syncFPS;
             public int cameraFPS;
 
@@ -40,10 +44,13 @@ namespace PoseAI
             public string signature = "Your App Signature";
 
             // 0 for verbose JSON, 1 for more compact packets.
+#if VERBOSE_PACKET
+            public int packetFormat = 0;
+#else
             public int packetFormat = 1;
-
-            //this is the version of our AI.  version 1 is our original model during beta and release.  version 2 was released in March 2022 and is currently the default.  
-            public int modelVersion = 2;
+#endif
+            //this is the version of our AI.  version 3 is current as of June 2023.  
+            public int modelVersion = 3;
         }
         public Handshake HANDSHAKE = new Handshake();
 
@@ -60,18 +67,18 @@ namespace PoseAI
 
         //public double echoServerTimestamp = <your timestamp goes here>;
 
-        public static PoseAIHandshake Factory(PoseAI_Modes mode, PoseAI_Rigs rig, bool mirror, int syncFPS, int cameraFPS)
+        public static PoseAIHandshake Factory(PoseAI_Modes mode, PoseAI_Rigs rig, bool mirror, bool face, int syncFPS, int cameraFPS)
         {
             PoseAIHandshake handshake = new PoseAIHandshake();
             handshake.HANDSHAKE.rig = rig.ToString();
-            handshake.HANDSHAKE.mode = mode.ToString();
+            handshake.HANDSHAKE.mode = mode==PoseAI_Modes.SeatedAtDesk ? "Desktop" : mode.ToString(); //in process of migrating name
             handshake.HANDSHAKE.mirror = mirror ? "YES" : "NO";
+            handshake.HANDSHAKE.face = face ? "YES" : "NO";
             handshake.HANDSHAKE.cameraFPS = Mathf.Max(cameraFPS, PoseAIConfig.MIN_CAMERA_FPS);
             handshake.HANDSHAKE.syncFPS = Mathf.Max(handshake.HANDSHAKE.cameraFPS, syncFPS);
             return handshake;
         }
     }
-
 
     [System.Serializable]
     public abstract class PoseAIRigBase
@@ -92,8 +99,14 @@ namespace PoseAI
         public int PF;
 
         // face blendshapes if available.  This will only work if PF=1  (compressed).  For Verbose need to change this to a List. May to resolve in future release
+#if VERBOSE_PACKET
+        public List<float> Face = new(52);
+#else
         public string Face = "";
-        public List<float> blendshapes = new List<float>();
+#endif
+
+
+        public List<float> blendshapes = new List<float>(new float[52]);
 
         //receives compact touch updates from app, and adds them as vector 2s to Queue for game logic processing.  Values are relative to phone not user (use orientation to rotate as appropriate)
         public string TouchState = "";
@@ -114,7 +127,7 @@ namespace PoseAI
         public int lowerBodyNumOfJoints = 8;
 
         // this is the order the PoseCamera sends the joints.
-        public static readonly List<HumanBodyBones> bones = new List<HumanBodyBones>{
+        private static readonly List<HumanBodyBones> bones = new List<HumanBodyBones>{
             HumanBodyBones.Hips,
             HumanBodyBones.RightUpperLeg,
             HumanBodyBones.RightLowerLeg,
@@ -170,10 +183,20 @@ namespace PoseAI
             HumanBodyBones.RightThumbIntermediate,
             HumanBodyBones.RightThumbDistal
         };
+        public virtual List<HumanBodyBones> GetBones() {
+            return bones;
+        }
+        public virtual Dictionary<int, string> GetExtraBones() { return new() { }; }
 
-        public static readonly List<int> parentIndices = new List<int> {
-        0,0,1,2,3,0,5,6,7,0,9,10,11,12,11,14,15,11,17,18,16,0,20,22,23,20,25,26,20,28,29,20,31,32,20,34,35,19,0,37,39,40,37,42,43,37,45,46,37,48,49,37,51,52,
+
+        public static readonly List<int> genericParentIndices = new() {
+        0,0,1,2,3,0,5,6,7,0,9,10,11,12,11,14,15,11,17,18,16,16,20,22,23,20,25,26,20,28,29,20,31,32,20,34,35,19,19,37,39,40,37,42,43,37,45,46,37,48,49,37,51,52,
         };
+
+        public virtual List<int> GetParentIndices()
+        {
+            return genericParentIndices;
+        }
 
         protected internal List<List<float>> rotationData;
         protected internal List<string> rotationNames;
@@ -221,15 +244,18 @@ namespace PoseAI
             {
                 GetBody().Scalars.ProcessCompact(ref GetBody().ScaA);
                 GetBody().Vectors.ProcessCompact(ref GetBody().VecA);
-                GetBody().Vectors.ProcessCompact(ref GetBody().VecA);
                 GetBody().Events.ProcessCompact(ref GetBody().EveA);
                 visibility.ProcessCompact(ref GetBody().VisA);
-                ProcessFace();
+                GetLeftHand().ProcessCompact();
+                GetRightHand().ProcessCompact();
+                
+
             }
             else
             {
                 visibility.ProcessVerbose(ref GetBody().Scalars);
             }
+            ProcessFace();
             ProcessTouches();
             return true;
         }
@@ -345,11 +371,17 @@ namespace PoseAI
 
         private void ProcessFace()
         {
-            if (Face.Length > 1)
+#if VERBOSE_PACKET
+            if (Face.Count == 52)
             {
-                blendshapes = new List<float>(Face.Length / 2);
-                PoseAI_Decoder.FStringFixed12ToFloat(ref Face, ref blendshapes);
+                blendshapes = Face;
             }
+#else
+            if (Face.Length == 104)
+            {
+                PoseAI_Decoder.FStringFixed12ToFloatInPlace(ref Face, ref blendshapes);
+            }
+#endif
         }
 
         private void ProcessTouches()
@@ -434,6 +466,9 @@ namespace PoseAI
         public List<float> HipLean = new List<float> { 0.0f, 0.0f };
         public List<float> HandIkL = new List<float> { 0.0f, 0.0f, 0.0f };
         public List<float> HandIkR = new List<float> { 0.0f, 0.0f, 0.0f };
+        public List<float> Hip = new List<float> { 0.0f, 0.0f, 0.0f };
+        public List<float> FootIkL = new List<float> { 0.0f, 0.0f, 0.0f };
+        public List<float> FootIkR = new List<float> { 0.0f, 0.0f, 0.0f };
 
 
         public void ProcessCompact(ref string compactString)
@@ -446,12 +481,12 @@ namespace PoseAI
             ChestScreen[0] = PoseAI_Decoder.FixedB64pairToFloat(compactString[8], compactString[9]);
             ChestScreen[1] = PoseAI_Decoder.FixedB64pairToFloat(compactString[10], compactString[11]);
             if (compactString.Length < 24) return;
-            HandIkL[0] = PoseAI_Decoder.FixedB64pairToFloat(compactString[12], compactString[13]) * 4.0f;
-            HandIkL[1] = PoseAI_Decoder.FixedB64pairToFloat(compactString[14], compactString[15]) * 4.0f;
-            HandIkL[2] = PoseAI_Decoder.FixedB64pairToFloat(compactString[16], compactString[17]) * 4.0f;
-            HandIkR[0] = PoseAI_Decoder.FixedB64pairToFloat(compactString[18], compactString[19]) * 4.0f;
-            HandIkR[1] = PoseAI_Decoder.FixedB64pairToFloat(compactString[20], compactString[21]) * 4.0f;
-            HandIkR[2] = PoseAI_Decoder.FixedB64pairToFloat(compactString[22], compactString[23]) * 4.0f;
+            PoseAI_Decoder.FStringFixed12ToFloat(compactString.Substring(12, 6), ref HandIkL, 4.0f, true);
+            PoseAI_Decoder.FStringFixed12ToFloat(compactString.Substring(18, 6), ref HandIkR, 4.0f, true);
+            if (compactString.Length < 42) return;
+            PoseAI_Decoder.FStringFixed12ToFloat(compactString.Substring(24, 6), ref Hip, 4.0f, true);
+            PoseAI_Decoder.FStringFixed12ToFloat(compactString.Substring(30, 6), ref FootIkL, 4.0f, true);
+            PoseAI_Decoder.FStringFixed12ToFloat(compactString.Substring(36, 6), ref FootIkR, 4.0f, true);
         }
 
     }
@@ -465,6 +500,7 @@ namespace PoseAI
         public float VisArmR = 0.0f;
         public float VisLegL = 0.0f;
         public float VisLegR = 0.0f;
+        public float VisFace = 0.0f;
 
 
         /** location of left hand relative to body in broad zones */
@@ -525,8 +561,9 @@ namespace PoseAI
         public bool isRightArm = false;
         public bool isLeftLeg = false;
         public bool isRightLeg = false;
+        public bool isFace = false;
 
-        
+
         public bool HasChanged() { return hasChanged; }
         public void ProcessVerbose(ref ScalarsBody bodyVerbose)
         {
@@ -535,7 +572,8 @@ namespace PoseAI
             SetAndCheckForChange(bodyVerbose.VisLegL > 0.5f, ref isLeftLeg, ref hasChanged);
             SetAndCheckForChange(bodyVerbose.VisLegR > 0.5f, ref isRightLeg, ref hasChanged);
             SetAndCheckForChange(bodyVerbose.VisArmL > 0.5f, ref isLeftArm, ref hasChanged);
-            SetAndCheckForChange(bodyVerbose.VisArmR > 0.5f, ref isRightArm, ref hasChanged);    
+            SetAndCheckForChange(bodyVerbose.VisArmR > 0.5f, ref isRightArm, ref hasChanged);
+            SetAndCheckForChange(bodyVerbose.VisFace > 0.5f, ref isFace, ref hasChanged);
         }
 
         public void ProcessCompact(ref string visString)
@@ -546,6 +584,8 @@ namespace PoseAI
             SetAndCheckForChange(visString[2] != '0', ref isRightLeg, ref hasChanged);
             SetAndCheckForChange(visString[3] != '0', ref isLeftArm, ref hasChanged);
             SetAndCheckForChange(visString[4] != '0', ref isRightArm, ref hasChanged);
+            if (visString.Length>5)
+                SetAndCheckForChange(visString[5] != '0', ref isFace, ref hasChanged);
         }
         private bool hasChanged = false;
 
@@ -671,6 +711,28 @@ namespace PoseAI
 
         // compressed format field
         public string RotA = "";
+
+        public string Point = "";
+
+
+        // fist = 0.0, fully extended fingers = 1.0, can vary depending on number of straight fingers.
+        public float Open = 0.5f;
+
+        public void ProcessCompact()
+        {
+            if (Point.Length >= 4)
+            {
+                Vectors.PointScreen[0] = PoseAI_Decoder.FixedB64pairToFloat(Point[0], Point[1]);
+                Vectors.PointScreen[1] = PoseAI_Decoder.FixedB64pairToFloat(Point[2], Point[3]);
+            }
+            if (Point.Length >= 8)
+            {
+                Vectors.ThumbScreen[0] = PoseAI_Decoder.FixedB64pairToFloat(Point[4], Point[5]);
+                Vectors.ThumbScreen[1] = PoseAI_Decoder.FixedB64pairToFloat(Point[6], Point[7]);
+            }
+        }
+
+
     }
 
     [System.Serializable]
@@ -681,12 +743,7 @@ namespace PoseAI
     public class VectorsHand
     {
         public List<float> PointScreen = new List<float> { 0.0f, 0.0f };
-        public void ProcessCompact(ref string compactString)
-        {
-            if (compactString.Length < 4) return;
-            PointScreen[0] = PoseAI_Decoder.FixedB64pairToFloat(compactString[0], compactString[1]);
-            PointScreen[1] = PoseAI_Decoder.FixedB64pairToFloat(compactString[2], compactString[3]);
-        }
+        public List<float> ThumbScreen = new List<float> { 0.0f, 0.0f };
     }
 
 

@@ -1,0 +1,39 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "3.0",
+	"FriendlyName": "PoseAI LiveLink",
+	"Description": "LiveLink plugin to stream from the Pose Camera motion capture engine by PoseAI",
+	"Category": "Animation",
+	"CreatedBy": "Pose AI Ltd",
+	"CreatedByURL": "www.pose-ai.com",
+	"DocsURL": "www.pose-ai.com/unreal-engine-livelink",
+	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/3db8f23ad003492eb85a50de31e5bc57",
+	"SupportURL": "support@pose-ai.com",
+	"EngineVersion": "5.0.0",
+	"CanContainContent": false,
+	"IsBetaVersion": false,
+	"Installed": true,
+	"Modules": [
+		{
+			"Name": "PoseAILiveLink",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"WhitelistPlatforms": [
+				"Win64",
+				"Mac"
+			]
+		},
+		{
+			"Name": "PoseAILiveLinkEd",
+			"Type": "UncookedOnly",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "LiveLink",
+			"Enabled": true
+		}
+	]
+}
