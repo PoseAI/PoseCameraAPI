@@ -401,7 +401,7 @@ void PoseAIRig::ProcessVerboseSupplementaryData(const TSharedPtr<FJsonObject> js
 		vecHandLeft = (objHandLeft->HasTypedField<EJson::Object>(fieldVectors)) ? objHandLeft->GetObjectField(fieldVectors) : nullptr;
 		liveValues.ProcessVerboseVectorsHandLeft(vecHandLeft);
 		if (objHandLeft->HasTypedField<EJson::Number>("Open"))
-			liveValues.opennessRightHand = objHandLeft->GetNumberField("Open");
+			liveValues.opennessLeftHand = objHandLeft->GetNumberField("Open");
 	}
 	if (objHandRight != nullptr && objHandRight.IsValid()) {
 		vecHandRight = (objHandRight->HasTypedField<EJson::Object>(fieldVectors)) ? objHandRight->GetObjectField(fieldVectors) : nullptr;

@@ -297,8 +297,8 @@ void FPoseAILiveValues::ProcessCompactVectorsHandLeft(const TSharedPtr < FJsonOb
         FixedB64pairToFloat(Point[idx], Point[idx + 1]),
         FixedB64pairToFloat(Point[idx + 2], Point[idx + 3])
     );
-    if (handObj->HasTypedField<EJson::Number>("Op")) 
-        opennessLeftHand = handObj->GetNumberField("Op");
+    if (handObj->HasTypedField<EJson::Number>("Open")) 
+        opennessLeftHand = handObj->GetNumberField("Open");
 }
 
 void FPoseAILiveValues::ProcessCompactVectorsHandRight(const TSharedPtr < FJsonObject > handObj) {
@@ -315,8 +315,8 @@ void FPoseAILiveValues::ProcessCompactVectorsHandRight(const TSharedPtr < FJsonO
         FixedB64pairToFloat(Point[idx], Point[idx + 1]),
         FixedB64pairToFloat(Point[idx + 2], Point[idx + 3])
     );
-    if (handObj->HasTypedField<EJson::Number>("Op"))
-        opennessRightHand = handObj->GetNumberField("Op");
+    if (handObj->HasTypedField<EJson::Number>("Open"))
+        opennessRightHand = handObj->GetNumberField("Open");
 }
 
 
@@ -373,7 +373,6 @@ void FPoseAILiveValues::ProcessVerboseVectorsHandLeft(const TSharedPtr < FJsonOb
     ProcessFieldAsVector2D(vecHand, fieldPointScreen, pointHandLeft);
     ProcessFieldAsVector2D(vecHand, fieldThumbScreen, pointThumbLeft);
     ProcessFieldAsVector3D(vecHand, "FingerIk", fingerIkL);
-
 }
 
 void FPoseAILiveValues::ProcessVerboseVectorsHandRight(const TSharedPtr < FJsonObject > vecHand){
