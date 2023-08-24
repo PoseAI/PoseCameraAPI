@@ -75,7 +75,7 @@ namespace PoseAI
             handshake.HANDSHAKE.mirror = mirror ? "YES" : "NO";
             handshake.HANDSHAKE.face = face ? "YES" : "NO";
             handshake.HANDSHAKE.cameraFPS = Mathf.Max(cameraFPS, PoseAIConfig.MIN_CAMERA_FPS);
-            handshake.HANDSHAKE.syncFPS = Mathf.Max(handshake.HANDSHAKE.cameraFPS, syncFPS);
+            handshake.HANDSHAKE.syncFPS = 0; //syncFPS is being depreciated. setting to zero to ensure all versions of engine don't use 
             return handshake;
         }
     }

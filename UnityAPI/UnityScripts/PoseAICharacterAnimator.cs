@@ -192,14 +192,17 @@ namespace PoseAI
                 if (UseUpperBodyOnly && j < 9) // note 9 may not be the number of lower joints in a custom schedule so this may need to be altered
                     continue;
                 var p = parentIndices[j];
-                var boneTransform = entry.Value;
-                if (_remapping != null)
+                if (validity[j] && validity[p])
                 {
-                    boneTransform.localRotation = Quaternion.Slerp(boneTransform.localRotation, Quaternion.Inverse(rotations[p] * _remapping[p]) * rotations[j] * _remapping[j], AnimationAlpha);
-                }
-                else
-                {
-                    boneTransform.localRotation = Quaternion.Slerp(boneTransform.localRotation, Quaternion.Inverse(rotations[p]) * rotations[j], AnimationAlpha);
+                    var boneTransform = entry.Value;
+                    if (_remapping != null)
+                    {
+                        boneTransform.localRotation = Quaternion.Slerp(boneTransform.localRotation, Quaternion.Inverse(rotations[p] * _remapping[p]) * rotations[j] * _remapping[j], AnimationAlpha);
+                    }
+                    else
+                    {
+                        boneTransform.localRotation = Quaternion.Slerp(boneTransform.localRotation, Quaternion.Inverse(rotations[p]) * rotations[j], AnimationAlpha);
+                    }
                 }
             }
         }
