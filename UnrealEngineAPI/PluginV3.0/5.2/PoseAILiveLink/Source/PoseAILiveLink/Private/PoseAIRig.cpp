@@ -779,9 +779,9 @@ void PoseAIRigMetaHuman::Configure()
 void PoseAIRigDazUE::Configure()
 {
 	//daz has extra joints in the legs
-	 rShinJoint = 4;
-	 lShinJoint = 9;
-	 lowerBodyNumOfJoints = 10;
+	 rShinJoint = 5;
+	 lShinJoint = 10;
+	 lowerBodyNumOfJoints = 11;
 
 	jointNames.Empty();
 	boneVectors.Empty();

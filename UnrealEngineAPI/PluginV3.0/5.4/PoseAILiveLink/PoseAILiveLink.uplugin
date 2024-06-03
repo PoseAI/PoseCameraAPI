@@ -10,7 +10,7 @@
 	"DocsURL": "www.pose-ai.com/unreal-engine-livelink",
 	"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/product/3db8f23ad003492eb85a50de31e5bc57",
 	"SupportURL": "support@pose-ai.com",
-	"EngineVersion": "5.2.0",
+	"EngineVersion": "5.4.0",
 	"CanContainContent": false,
 	"IsBetaVersion": false,
 	"Installed": true,
